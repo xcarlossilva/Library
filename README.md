@@ -1,2 +1,2 @@
 # Library Manager
-LIBRARY is a manager of linked assets in a scene.
+LIBRARY MANAGER is a manager of linked assets in a scene.
