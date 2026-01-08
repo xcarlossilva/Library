@@ -124,14 +124,14 @@ class VIEW3D_PT_libraries_list(bpy.types.Panel):
         
         has_libraries = clamp_library_index(scene)
         
-        layout.label(text="Linked files in the scene:")
+        layout.label(text="Assets link Setup ")
         layout.operator("wm.link_files", text="Link Files", icon="LINK_BLEND")
-        layout.menu("WM_MT_asset_import_modes", text="Import Method", icon='IMPORT')
         row = layout.row(align=True)
-        row.operator("wm.library_prefs", text="Library setup", icon="PREFERENCES")
-        row.operator("wm.set_asset_import_link", text="Link", icon='LINKED')
-        row.operator("wm.toggle_asset_browser", text="Open Asset Browser", icon='ASSET_MANAGER')
-        # Primary Library List
+        row.operator("wm.library_prefs", text="Lib setup", icon="PREFERENCES")
+        row.operator("wm.toggle_asset_browser", text="Asset Browser", icon='ASSET_MANAGER')
+        row.operator("wm.set_asset_import_link", text="Link Method", icon='LINKED')
+        
+        layout.label(text="Linked files in the scene:")# Primary Library List
         layout.template_list("VIEW3D_UL_libraries", "", bpy.data, "libraries", scene, "libraries_index")
         
         row = layout.row(align=True)

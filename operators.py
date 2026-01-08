@@ -12,7 +12,30 @@ class WM_OT_link_files(bpy.types.Operator):
     
     def execute(self, context):
         bpy.ops.wm.link('INVOKE_DEFAULT')
-        return {'FINISHED'} 
+        return {'FINISHED'}
+        
+class WM_OT_set_asset_import_link(bpy.types.Operator):
+    bl_idname = "wm.set_asset_import_link"
+    bl_label = "Set Import to Link"
+    bl_description = "Changes the Asset Browser import method to Link"
+
+    def execute(self, context):
+        # 1. Find the Asset Browser area
+        asset_area = next((a for a in context.screen.areas if a.ui_type == 'ASSETS'), None)
+        
+        if asset_area:
+            # 2. Access the space parameters
+            # We use the first space because Asset Browsers only have one
+            space = asset_area.spaces.active
+            params = getattr(space, "params", None)
+            
+            if params:
+                params.import_method = 'LINK'
+                self.report({'INFO'}, "Import Method: LINK")
+                return {'FINISHED'}
+            
+        self.report({'WARNING'}, "Asset Browser not found")
+        return {'CANCELLED'}
         
 class WM_OT_library_prefs(bpy.types.Operator):
     bl_idname = "wm.library_prefs"
@@ -67,26 +90,6 @@ class WM_OT_toggle_asset_browser(bpy.types.Operator):
 
         bpy.app.timers.register(set_asset_mode, first_interval=0.01)
         return {'FINISHED'}
-
-class WM_MT_asset_import_modes(bpy.types.Menu):
-    bl_label = "Asset Import Method"
-    bl_idname = "WM_MT_asset_import_modes"
-
-    def draw(self, context):
-        layout = self.layout
-        # We find the asset area to show the current status or set the value
-        asset_area = next((a for a in context.screen.areas if a.ui_type == 'ASSETS'), None)
-        
-        if asset_area:
-            params = asset_area.spaces.active.params
-            
-            # These are the three standard Blender import methods
-            layout.prop_enum(params, "import_method", value='LINK')
-            layout.prop_enum(params, "import_method", value='APPEND')
-            layout.prop_enum(params, "import_method", value='APPEND_REUSE')
-        else:
-            layout.label(text="Open Asset Browser first", icon='INFO')
-
 
 class WM_OT_toggle_linked_category(bpy.types.Operator):
     bl_idname = "wm.toggle_linked_category"
@@ -369,9 +372,9 @@ class WM_OT_missing_files(bpy.types.Operator):
 
 classes = (
     WM_OT_link_files,
+    WM_OT_set_asset_import_link,
     WM_OT_library_prefs,
     WM_OT_toggle_asset_browser,
-    WM_MT_asset_import_modes,
     WM_OT_toggle_linked_category,
     WM_OT_toggle_all_linked_categories,
     WM_OT_select_linked_objects,

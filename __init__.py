@@ -26,9 +26,9 @@ def register():
         properties.LinkedCategory,
         properties.LinkedItem,
         operators.WM_OT_link_files,
+        operators.WM_OT_set_asset_import_link,
         operators.WM_OT_library_prefs,
         operators.WM_OT_toggle_asset_browser,
-        operators.WM_OT_set_asset_import_link,
         operators.WM_OT_toggle_linked_category,
         operators.WM_OT_toggle_all_linked_categories,
         operators.WM_OT_select_linked_objects,
@@ -41,7 +41,8 @@ def register():
         ui.VIEW3D_UL_libraries,
         ui.VIEW3D_UL_linked_items,
         ui.VIEW3D_PT_libraries_list,
-        # menu.WM_MT_asset_import_modes,
+        
+        
     )
 
     for cls in classes:
@@ -66,9 +67,9 @@ def unregister():
         properties.LinkedCategory,
         properties.LinkedItem,
         operators.WM_OT_link_files,
+        operators.WM_OT_set_asset_import_link,
         operators.WM_OT_library_prefs,
         operators.WM_OT_toggle_asset_browser,
-        operators.WM_OT_set_asset_import_link,
         operators.WM_OT_toggle_linked_category,
         operators.WM_OT_toggle_all_linked_categories,
         operators.WM_OT_select_linked_objects,
