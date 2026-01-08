@@ -1,2 +1,2 @@
-# Library
-LIBRARY is a structure of folders and scripts.
+# Library Manager
+LIBRARY is a manager of linked assets in a scene.
