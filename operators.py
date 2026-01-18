@@ -17,10 +17,29 @@ class WM_OT_link_files(bpy.types.Operator):
 class WM_OT_set_asset_import_link(bpy.types.Operator):
     bl_idname = "wm.set_asset_import_link"
     bl_label = "Set Import to Link"
-    bl_description = "Changes the Asset Browser import method to Link"
-
+    bl_description = "Changes the Prefs import method to Link"
+    
+    # @classmethod
+    # def poll(cls, context):
+        # # The button is clickable ONLY if the method is NOT already 'LINK'
+        # prefs = context.preferences.filepaths
+        # if prefs.asset_libraries:
+            # return prefs.asset_libraries[0].import_method != 'LINK'
+        # return True
+          
     def execute(self, context):
-        # 1. Find the Asset Browser area
+        prefs = context.preferences.filepaths
+        for lib in prefs.asset_libraries:
+            lib.import_method = 'LINK'
+        return {'FINISHED'}
+        
+class WM_OT_set_asset_browser_import_link(bpy.types.Operator):
+    bl_idname = "wm.set_asset_browser_import_link"
+    bl_label = "Set Import to Link Asset Browser"
+    bl_description = "Changes the Asset Browser import method to Link"
+   
+    def execute(self, context):
+        
         asset_area = next((a for a in context.screen.areas if a.ui_type == 'ASSETS'), None)
         
         if asset_area:
@@ -36,7 +55,7 @@ class WM_OT_set_asset_import_link(bpy.types.Operator):
             
         self.report({'WARNING'}, "Asset Browser not found")
         return {'CANCELLED'}
-        
+ 
 class WM_OT_library_prefs(bpy.types.Operator):
     bl_idname = "wm.library_prefs"
     bl_label = "Library Prefs Setup"
@@ -105,6 +124,25 @@ class WM_OT_toggle_linked_category(bpy.types.Operator):
             return {'FINISHED'}
         self.report({'WARNING'}, f"Category '{self.category_name}' not found.")
         return {'CANCELLED'}
+
+class WM_OT_toggle_relative_path(bpy.types.Operator):
+    """Toggles the Global Relative Path Preference"""
+    bl_idname = "wm.toggle_relative_path"
+    bl_label = "Toggle Global Relative Path"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        # Access the global filepath preferences
+        prefs = context.preferences.filepaths
+        
+        # Flip the boolean value
+        prefs.use_relative_paths = not prefs.use_relative_paths
+        
+        # Also force all libraries to match this global state
+        for lib in prefs.asset_libraries:
+            lib.use_relative_path = prefs.use_relative_paths
+            
+        return {'FINISHED'}
 
 class WM_OT_toggle_all_linked_categories(bpy.types.Operator):
     bl_idname = "wm.toggle_all_linked_categories"
@@ -373,9 +411,11 @@ class WM_OT_missing_files(bpy.types.Operator):
 classes = (
     WM_OT_link_files,
     WM_OT_set_asset_import_link,
+    WM_OT_set_asset_browser_import_link,
     WM_OT_library_prefs,
     WM_OT_toggle_asset_browser,
     WM_OT_toggle_linked_category,
+    WM_OT_toggle_relative_path,
     WM_OT_toggle_all_linked_categories,
     WM_OT_select_linked_objects,
     WM_OT_reload_library,

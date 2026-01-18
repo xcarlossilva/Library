@@ -2,6 +2,60 @@ import bpy
 import os  # <--- Add this line
 from .utils import absolute_path, clamp_library_index
 
+class VIEW3D_PT_library_main(bpy.types.Panel):
+    bl_label = "Library Manager"
+    bl_idname = "VIEW3D_PT_library_main"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = 'Item'
+
+    def draw(self, context):
+        layout = self.layout
+        # You can leave this empty or add your main list here
+        layout.label(text="Main Content Area")
+        layout.label(text="Assets link Setup ")
+        layout.operator("wm.link_files", text="Link Files", icon="LINK_BLEND")
+
+# 2. THE SUB-PANEL (The "Preferences" toggle)
+class VIEW3D_PT_library_preferences(bpy.types.Panel):
+    bl_label = "Preferences"
+    bl_idname = "VIEW3D_PT_library_preferences"
+    bl_parent_id = "VIEW3D_PT_library_main" # <--- THIS LINKS THEM
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_options = {'DEFAULT_CLOSED'} # Starts collapsed like your image
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+        prefs = context.preferences.filepaths
+  # We read the current state of the Global Preference
+        is_relative = prefs.use_relative_paths
+        btn_text = "Relative Path" if is_relative else "Relative Path"
+        btn_icon = 'CHECKBOX_HLT' if is_relative else "CHECKBOX_DEHLT"     
+        # Everything inside here appears when the "Preferences" arrow is clicked
+        row = layout.row(align=True)
+        row.operator("wm.library_prefs", text="Setup", icon="PREFERENCES")
+        row.operator("wm.set_asset_import_link", text="Link Method", icon="LINKED")
+        row.operator("wm.toggle_relative_path", text=btn_text, icon=btn_icon,depress=is_relative)
+
+class VIEW3D_PT_assetbrowser_preferences(bpy.types.Panel):
+    bl_label = "Asset Browser"
+    bl_idname = "VIEW3D_PT_assetbrowser_preferences"
+    bl_parent_id = "VIEW3D_PT_library_main" # <--- THIS LINKS THEM
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_options = {'DEFAULT_CLOSED'} # Starts collapsed like your image
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        row = layout.row(align=True)
+        row.operator("wm.toggle_asset_browser", text="Asset Browser")
+        row.operator("wm.set_asset_browser_import_link", text="Link Method")
+
+
 class VIEW3D_UL_libraries(bpy.types.UIList):
     """UIList for displaying main libraries with buttons"""
     bl_idname = "VIEW3D_UL_libraries"
@@ -114,25 +168,48 @@ class VIEW3D_PT_libraries_list(bpy.types.Panel):
     """Creates a Panel in the 3D Viewport under the Item tab listing library file paths"""
     bl_label = "Library Manager"
     bl_idname = "VIEW3D_PT_libraries_list"
+    bl_parent_id = "VIEW3D_PT_library_main" # <--- THIS LINKS THEM
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = 'Item'
+    bl_options = {'DEFAULT_CLOSED'}
 
+    
     def draw(self, context):
         layout = self.layout
         scene = context.scene
+        # prefs = context.preferences.filepaths
+  # # We read the current state of the Global Preference
+        # is_relative = prefs.use_relative_paths
+        # btn_text = "Relative Path" if is_relative else "Relative Path"
+        # btn_icon = 'CHECKBOX_HLT' if is_relative else "CHECKBOX_DEHLT"           
+      
+
+        # layout.label(text="Assets link Setup ")
+        # layout.operator("wm.link_files", text="Link Files", icon="LINK_BLEND")
+# The 'built-in' way to create a toggle header
+        # Draw content only if expanded
+    
+        # box = layout.box()
+        # box.label ( text="Asset Browser")
+        # row = box.row(align=True)
+        # row.operator("wm.toggle_asset_browser", text="Asset Browser", icon='ASSET_MANAGER')
+        # row.operator("wm.set_asset_browser_import_link", text="Link Method", icon='LINKED')
+                
+ 
+        layout.label(text="Linked files in the scene:", icon='LINKED')
+# Check if there are any linked libraries in the blend file
+        if not bpy.data.libraries:
+            box = layout.box()
+            box.label(text="No libraries linked in this project", icon='CANCEL')
+            # Optional: Add a button to open the file browser to link one
+            # box.operator("wm.link", text="Link a Library", icon='LINK_BLEND')
+            return
+                
+        # If libraries exist, show the UI List
+
         
-        has_libraries = clamp_library_index(scene)
-        
-        layout.label(text="Assets link Setup ")
-        layout.operator("wm.link_files", text="Link Files", icon="LINK_BLEND")
-        row = layout.row(align=True)
-        row.operator("wm.library_prefs", text="Lib setup", icon="PREFERENCES")
-        row.operator("wm.toggle_asset_browser", text="Asset Browser", icon='ASSET_MANAGER')
-        row.operator("wm.set_asset_import_link", text="Link Method", icon='LINKED')
-        
-        layout.label(text="Linked files in the scene:")# Primary Library List
-        layout.template_list("VIEW3D_UL_libraries", "", bpy.data, "libraries", scene, "libraries_index")
+        # We use bpy.data as the 'dataptr' because 'libraries' lives there
+        layout.template_list("VIEW3D_UL_libraries",   "", bpy.data, "libraries", scene,  "libraries_index")
         
         row = layout.row(align=True)
         row.operator("wm.refresh_libraries", text="Refresh List", icon="FILE_REFRESH")
@@ -142,6 +219,11 @@ class VIEW3D_PT_libraries_list(bpy.types.Panel):
         row.operator("wm.missing_files", text="Missing files", icon="LIBRARY_DATA_BROKEN")
         row.operator("wm.cleanup_libraries", text="Clean Broken Links", icon="TRASH")
         
+        
+
+                
+        has_libraries = clamp_library_index(scene)
+
         # --- Draw Item Data Info Panel ---
         if has_libraries:
             selected_library = bpy.data.libraries[scene.libraries_index]
@@ -203,10 +285,15 @@ class VIEW3D_PT_libraries_list(bpy.types.Panel):
                     
             else:
                 layout.label(text="Select a library to see linked items.")
+# 1. YOUR MAIN PANEL
 
+        # Add your relative path toggle here
 classes = (
     VIEW3D_UL_libraries,
     VIEW3D_UL_linked_items,
+    VIEW3D_PT_library_main,
+    VIEW3D_PT_library_preferences,
+    VIEW3D_PT_assetbrowser_preferences,
     VIEW3D_PT_libraries_list,
 )
 
