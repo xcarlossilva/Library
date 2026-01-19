@@ -19,13 +19,13 @@ class WM_OT_set_asset_import_link(bpy.types.Operator):
     bl_label = "Set Import to Link"
     bl_description = "Changes the Prefs import method to Link"
     
-    # @classmethod
-    # def poll(cls, context):
-        # # The button is clickable ONLY if the method is NOT already 'LINK'
-        # prefs = context.preferences.filepaths
-        # if prefs.asset_libraries:
-            # return prefs.asset_libraries[0].import_method != 'LINK'
-        # return True
+    @classmethod
+    def poll(cls, context):
+        # The button is clickable ONLY if the method is NOT already 'LINK'
+        prefs = context.preferences.filepaths
+        if prefs.asset_libraries:
+            return prefs.asset_libraries[1].import_method != 'LINK'
+        return False
           
     def execute(self, context):
         prefs = context.preferences.filepaths
@@ -33,18 +33,55 @@ class WM_OT_set_asset_import_link(bpy.types.Operator):
             lib.import_method = 'LINK'
         return {'FINISHED'}
         
+class WM_OT_toggle_relative_path(bpy.types.Operator):
+    """Toggles the Global Relative Path Preference"""
+    bl_idname = "wm.toggle_relative_path"
+    bl_label = "Set Libraries to Relative"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        prefs = bpy.context.preferences.filepaths
+        if not prefs.asset_libraries:
+            return False
+        
+        # Clickable if at least one library is NOT relative
+        return any(not lib.use_relative_path for lib in prefs.asset_libraries)
+
+    def execute(self, context):
+        prefs = context.preferences.filepaths
+        for lib in prefs.asset_libraries:
+            lib.use_relative_path = True
+            
+        prefs.use_relative_paths = True
+        context.area.tag_redraw()
+        return {'FINISHED'}
+        
 class WM_OT_set_asset_browser_import_link(bpy.types.Operator):
     bl_idname = "wm.set_asset_browser_import_link"
     bl_label = "Set Import to Link Asset Browser"
     bl_description = "Changes the Asset Browser import method to Link"
-   
-    def execute(self, context):
-        
+
+    @classmethod
+    def poll(cls, context):
+        # 1. Find the Asset Browser area
         asset_area = next((a for a in context.screen.areas if a.ui_type == 'ASSETS'), None)
         
         if asset_area:
-            # 2. Access the space parameters
-            # We use the first space because Asset Browsers only have one
+            space = asset_area.spaces.active
+            params = getattr(space, "params", None)
+            
+            if params:
+                # The button is CLICKABLE only if the method is NOT already 'LINK'
+                return params.import_method != 'LINK'
+        
+        # If no Asset Browser is open, we disable the button
+        return False
+   
+    def execute(self, context):
+        asset_area = next((a for a in context.screen.areas if a.ui_type == 'ASSETS'), None)
+        
+        if asset_area:
             space = asset_area.spaces.active
             params = getattr(space, "params", None)
             
@@ -125,24 +162,7 @@ class WM_OT_toggle_linked_category(bpy.types.Operator):
         self.report({'WARNING'}, f"Category '{self.category_name}' not found.")
         return {'CANCELLED'}
 
-class WM_OT_toggle_relative_path(bpy.types.Operator):
-    """Toggles the Global Relative Path Preference"""
-    bl_idname = "wm.toggle_relative_path"
-    bl_label = "Toggle Global Relative Path"
-    bl_options = {'REGISTER', 'UNDO'}
 
-    def execute(self, context):
-        # Access the global filepath preferences
-        prefs = context.preferences.filepaths
-        
-        # Flip the boolean value
-        prefs.use_relative_paths = not prefs.use_relative_paths
-        
-        # Also force all libraries to match this global state
-        for lib in prefs.asset_libraries:
-            lib.use_relative_path = prefs.use_relative_paths
-            
-        return {'FINISHED'}
 
 class WM_OT_toggle_all_linked_categories(bpy.types.Operator):
     bl_idname = "wm.toggle_all_linked_categories"
