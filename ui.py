@@ -13,7 +13,7 @@ class VIEW3D_PT_library_main(bpy.types.Panel):
         layout = self.layout
         # You can leave this empty or add your main list here
         layout.label(text="Link Assets")
-        layout.operator("wm.link_files", text="Link Files", icon="LINK_BLEND")
+
 
 # 2. THE SUB-PANEL (The "Preferences" toggle)
 class VIEW3D_PT_library_preferences(bpy.types.Panel):
@@ -48,7 +48,7 @@ class VIEW3D_PT_library_preferences(bpy.types.Panel):
         row.operator("wm.toggle_relative_path", text=btn_text, icon=btn_icon,depress=is_relative)
            
 class VIEW3D_PT_assetbrowser_preferences(bpy.types.Panel):
-    bl_label = "Asset Browser"
+    bl_label = "Assets"
     bl_idname = "VIEW3D_PT_assetbrowser_preferences"
     bl_parent_id = "VIEW3D_PT_library_main" # <--- THIS LINKS THEM
     bl_space_type = 'VIEW_3D'
@@ -72,10 +72,10 @@ class VIEW3D_PT_assetbrowser_preferences(bpy.types.Panel):
         text = 'Linked!' if is_link else 'FORCE set Linked'
         
         # If the poll above is False, this button grays out automatically
+        layout.operator("wm.link_files", text="Link Files", icon="LINK_BLEND")
         layout.operator("wm.toggle_asset_browser", text="Asset Browser", icon="ASSET_MANAGER")
-        layout.operator("wm.toggle_outliner_vertical", text="Outline")
-        
         layout.operator("wm.set_asset_browser_import_link", icon=icon, text=text,depress=is_link)
+        
 
 class VIEW3D_PT_libraries_list(bpy.types.Panel):
     """Creates a Panel in the 3D Viewport under the Item tab listing library file paths"""
@@ -90,8 +90,8 @@ class VIEW3D_PT_libraries_list(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         scene = context.scene
-        
-        layout.operator("wm.select_linked_objects", text="Select Asset", icon="RESTRICT_SELECT_OFF")
+        layout.label(text="Manage links")
+        layout.operator("wm.toggle_outliner_vertical", text="Library Outline", icon="OUTLINER")
 
 # Check if there are any linked libraries in the blend file
         if not bpy.data.libraries:
@@ -100,19 +100,17 @@ class VIEW3D_PT_libraries_list(bpy.types.Panel):
             # Optional: Add a button to open the file browser to link one
             # box.operator("wm.link", text="Link a Library", icon='LINK_BLEND')
             return
-                
-        # If libraries exist, show the UI List
-
         
         # We use bpy.data as the 'dataptr' because 'libraries' lives there
         layout.template_list("VIEW3D_UL_libraries",   "", bpy.data, "libraries", scene,  "libraries_index")
         
         row = layout.row(align=True)
+        row.operator("wm.select_linked_objects", text="Select Asset", icon="RESTRICT_SELECT_OFF")
         row.operator("wm.refresh_libraries", text="Refresh List", icon="FILE_REFRESH")
         
         layout.label(text="Edit linked files")
         row = layout.row(align=True)
-        row.operator("wm.missing_files", text="Missing files", icon="LIBRARY_DATA_BROKEN")
+        row.operator("wm.missing_files", text="Fix Missing files", icon="LIBRARY_DATA_BROKEN")
         row.operator("wm.cleanup_libraries", text="Clean Broken Links", icon="TRASH")
         
         
