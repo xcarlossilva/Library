@@ -46,8 +46,7 @@ class VIEW3D_PT_library_preferences(bpy.types.Panel):
         row = layout.row(align=True)
         row.operator("wm.set_asset_import_link", text=btn_texto , icon=btn_icono,depress=is_currently_linked)
         row.operator("wm.toggle_relative_path", text=btn_text, icon=btn_icon,depress=is_relative)
-        
-    
+           
 class VIEW3D_PT_assetbrowser_preferences(bpy.types.Panel):
     bl_label = "Asset Browser"
     bl_idname = "VIEW3D_PT_assetbrowser_preferences"
@@ -74,6 +73,8 @@ class VIEW3D_PT_assetbrowser_preferences(bpy.types.Panel):
         
         # If the poll above is False, this button grays out automatically
         layout.operator("wm.toggle_asset_browser", text="Asset Browser", icon="ASSET_MANAGER")
+        layout.operator("wm.toggle_outliner_vertical", text="Outline")
+        
         layout.operator("wm.set_asset_browser_import_link", icon=icon, text=text,depress=is_link)
 
 class VIEW3D_PT_libraries_list(bpy.types.Panel):
@@ -89,26 +90,9 @@ class VIEW3D_PT_libraries_list(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         scene = context.scene
-        # prefs = context.preferences.filepaths
-  # # We read the current state of the Global Preference
-        # is_relative = prefs.use_relative_paths
-        # btn_text = "Relative Path" if is_relative else "Relative Path"
-        # btn_icon = 'CHECKBOX_HLT' if is_relative else "CHECKBOX_DEHLT"           
-      
+        
+        layout.operator("wm.select_linked_objects", text="Select Asset", icon="RESTRICT_SELECT_OFF")
 
-        # layout.label(text="Assets link Setup ")
-        # layout.operator("wm.link_files", text="Link Files", icon="LINK_BLEND")
-# The 'built-in' way to create a toggle header
-        # Draw content only if expanded
-    
-        # box = layout.box()
-        # box.label ( text="Asset Browser")
-        # row = box.row(align=True)
-        # row.operator("wm.toggle_asset_browser", text="Asset Browser", icon='ASSET_MANAGER')
-        # row.operator("wm.set_asset_browser_import_link", text="Link Method", icon='LINKED')
-                
- 
-        # layout.label(text="Linked files in the scene:", icon='LINKED')
 # Check if there are any linked libraries in the blend file
         if not bpy.data.libraries:
             box = layout.box()
@@ -144,59 +128,59 @@ class VIEW3D_PT_libraries_list(bpy.types.Panel):
             row = layout.row()
             row.prop(selected_library,"filepath",text="")
 
-            # Dropdown Toggle for the entire linked list 
-            layout.separator()
-            box = layout.box()
+            # # Dropdown Toggle for the entire linked list 
+            # layout.separator()
+            # box = layout.box()
             
-            # Header Row for Linked Data Blocks
-            row_header = box.row(align=True)
-            row_header.prop(
-                scene, 
-                "linked_list_expanded", 
-                text="Linked Data Blocks:", 
-                icon='DOWNARROW_HLT' if scene.linked_list_expanded else 'RIGHTARROW',
-                emboss=False
-            )
+            # # Header Row for Linked Data Blocks
+            # row_header = box.row(align=True)
+            # row_header.prop(
+                # scene, 
+                # "linked_list_expanded", 
+                # text="Linked Data Blocks:", 
+                # icon='DOWNARROW_HLT' if scene.linked_list_expanded else 'RIGHTARROW',
+                # emboss=False
+            # )
             
-            # Global Expand/Collapse Button
-            if scene.linked_items:
-                row_header.operator(
-                    "wm.toggle_all_linked_categories",
-                    text="",
-                    icon='FULLSCREEN_EXIT' if all(c.is_expanded for c in scene.linked_categories) else 'FULLSCREEN_ENTER',
-                    emboss=False
-                )
+            # # Global Expand/Collapse Button
+            # if scene.linked_items:
+                # row_header.operator(
+                    # "wm.toggle_all_linked_categories",
+                    # text="",
+                    # icon='FULLSCREEN_EXIT' if all(c.is_expanded for c in scene.linked_categories) else 'FULLSCREEN_ENTER',
+                    # emboss=False
+                # )
 
             
-            if scene.linked_list_expanded:
-                if scene.linked_items:
+            # if scene.linked_list_expanded:
+                # if scene.linked_items:
                     
-                    # Linked Items List (with integrated search field)
-                    box.template_list(
-                        "VIEW3D_UL_linked_items", 
-                        "", 
-                        scene, 
-                        "linked_items", 
-                        scene, 
-                        "linked_items_index"
-                    )
+                    # # Linked Items List (with integrated search field)
+                    # box.template_list(
+                        # "VIEW3D_UL_linked_items", 
+                        # "", 
+                        # scene, 
+                        # "linked_items", 
+                        # scene, 
+                        # "linked_items_index"
+                    # )
                     
-                    # --- Selection Button ---
+                    # # --- Selection Button ---
                     
-                    # 1. Get the selected item
-                    selected_item = scene.linked_items[scene.linked_items_index] if scene.linked_items_index >= 0 and scene.linked_items_index < len(scene.linked_items) else None
+                    # # 1. Get the selected item
+                    # selected_item = scene.linked_items[scene.linked_items_index] if scene.linked_items_index >= 0 and scene.linked_items_index < len(scene.linked_items) else None
                     
-                    # 2. Check if the button should be drawn
-                    # The button is hidden if the selected item is a material (icon == 'MATERIAL')
-                    if selected_item and not selected_item.is_category and selected_item.icon != 'MATERIAL':
-                        row = box.row()
-                        row.operator("wm.select_linked_objects", text="Select Objects Using Data", icon='VIEW_ORTHO')
+                    # # 2. Check if the button should be drawn
+                    # # The button is hidden if the selected item is a material (icon == 'MATERIAL')
+                    # if selected_item and not selected_item.is_category and selected_item.icon != 'MATERIAL':
+                        # row = box.row()
+                        # row.operator("wm.select_linked_objects", text="Select Objects Using Data", icon='VIEW_ORTHO')
                     
-                else:
-                    box.label(text="No Objects, Collections, or Materials linked.", icon='INFO')
+                # else:
+                    # box.label(text="No Objects, Collections, or Materials linked.", icon='INFO')
                     
-            else:
-                layout.label(text="Select a library to see linked items.")
+            # else:
+                # layout.label(text="Select a library to see linked items.")
 
 
 
@@ -313,11 +297,11 @@ class VIEW3D_UL_linked_items(bpy.types.UIList):
         # Add your relative path toggle here
 classes = (
     VIEW3D_UL_libraries,
-    VIEW3D_UL_linked_items,
+    # VIEW3D_UL_linked_items,
     VIEW3D_PT_library_main,
     VIEW3D_PT_library_preferences,
     VIEW3D_PT_assetbrowser_preferences,
-    VIEW3D_PT_libraries_list,
+    # VIEW3D_PT_libraries_list,
 )
 
 def register():

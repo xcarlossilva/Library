@@ -162,8 +162,6 @@ class WM_OT_toggle_linked_category(bpy.types.Operator):
         self.report({'WARNING'}, f"Category '{self.category_name}' not found.")
         return {'CANCELLED'}
 
-
-
 class WM_OT_toggle_all_linked_categories(bpy.types.Operator):
     bl_idname = "wm.toggle_all_linked_categories"
     bl_label = "Expand/Collapse All Linked Categories"
@@ -428,6 +426,72 @@ class WM_OT_missing_files(bpy.types.Operator):
         bpy.ops.file.find_missing_files('INVOKE_DEFAULT')
         return {'FINISHED'} 
 
+class WM_OT_path_relative(bpy.types.Operator):
+    bl_idname = "wm.path_relative"
+    bl_label = "Relative Paths"
+    bl_description = "Linked assets as relative pathsl"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        screen = context.screen
+        bpy.ops.file.make_paths_relative()
+
+class WM_OT_toggle_outliner_vertical(bpy.types.Operator):
+    bl_idname = "wm.toggle_outliner_vertical"
+    bl_label = "Toggle Outliner Vertical"
+    bl_description = "Opens or closes the Outliner in a vertical side panel"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        screen = context.screen
+        
+        # 1. Search for existing Outliner
+        outliner_area = next((a for a in screen.areas if a.ui_type == 'OUTLINER'), None)
+
+        if outliner_area:
+            with context.temp_override(area=outliner_area):
+                bpy.ops.screen.area_close()
+            return {'FINISHED'}
+
+        # 2. Setup for split
+        original_areas = set(screen.areas)
+        bpy.ops.screen.area_split(direction='VERTICAL', factor=0.2)
+
+        def configure_outliner():
+            new_areas = [a for a in screen.areas if a not in original_areas]
+            
+            if new_areas:
+                target = new_areas[0]
+                # Set to Outliner
+                target.ui_type = 'OUTLINER'
+                
+                # Access the Outliner settings
+                space = target.spaces.active
+                if space.type == 'OUTLINER':
+                    # Set Display Mode to 'Blend File'
+                    space.display_mode = 'LIBRARIES'
+                    
+                    # Collapse all hierarchies
+                    with context.temp_override(area=target):
+                        bpy.ops.outliner.show_hierarchy_stats() # This toggles/refreshes view
+                        # We use the generic 'Close All' operator
+                        bpy.ops.outliner.show_one_level(open=False)
+                return None
+            
+            return 0.01
+
+        bpy.app.timers.register(configure_outliner, first_interval=0.01)
+        return {'FINISHED'}
+
+# Registration (for testing in the Text Editor)
+def register():
+    bpy.utils.register_class(WM_OT_toggle_outliner_vertical)
+
+if __name__ == "__main__":
+    register()
+    # To run immediately:
+    # bpy.ops.wm.toggle_outliner_vertical()
+
 classes = (
     WM_OT_link_files,
     WM_OT_set_asset_import_link,
@@ -444,6 +508,7 @@ classes = (
     WM_OT_cleanup_libraries,
     WM_OT_refresh_libraries,
     WM_OT_missing_files,
+    WM_OT_toggle_outliner_vertical,
 )
 
 def register():
