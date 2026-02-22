@@ -101,32 +101,84 @@ class WM_OT_library_prefs(bpy.types.Operator):
     def execute(self, context):
         bpy.ops.screen.userpref_show(section='FILE_PATHS')
         return {'FINISHED'}
-        
-class WM_OT_toggle_asset_browser(bpy.types.Operator):
-    bl_idname = "wm.toggle_asset_browser"
+    
+class WM_OT_show_asset_browser(bpy.types.Operator):
+    bl_idname = "wm.show_asset_browser"
     bl_label = "Toggle Asset Browser"
     bl_description = "Opens or closes the Asset Browser area"
     bl_options = {'REGISTER', 'UNDO'}
+    # configurable split factor
+
+    factor: bpy.props.FloatProperty(default=0.4, min=0.1, max=0.9)
 
     def execute(self, context):
+        window = context.window
         screen = context.screen
-        
-        # 1. Search for an existing Asset Browser
-        asset_area = next((a for a in screen.areas if a.ui_type == 'ASSETS'), None)
 
-        # 2. TOGGLE OFF: If it exists, close it
+        # --- CASE: CLOSE ---
+        asset_area = next((a for a in screen.areas
+                           if a.type == 'FILE_BROWSER' and a.ui_type == 'ASSETS'), None)
         if asset_area:
-            with context.temp_override(area=asset_area):
+            asset_area.type = 'VIEW_3D'
+            with context.temp_override(window=window, screen=screen, area=asset_area):
                 bpy.ops.screen.area_close()
+                self.report({'INFO'}, "Asset Browser closed → 3D View restored")
             return {'FINISHED'}
 
-        # 3. TOGGLE ON: Prepare to open
-        # We record the IDs of all current areas
-        original_areas = set(screen.areas)
+        # --- CASE: OPEN ---
+        view_3d = next((a for a in screen.areas if a.type == 'VIEW_3D'), None)
+        if view_3d:
+            # Close all bottom neighbors first
+            bottom_neighbors = [a for a in screen.areas
+                                if a.y < view_3d.y and a.x == view_3d.x and a.width == view_3d.width]
+            for neighbor in bottom_neighbors:
+                with context.temp_override(window=window, screen=screen, area=neighbor):
+                    bpy.ops.screen.area_close()
 
-        # Split the screen
-        bpy.ops.screen.area_split(direction='HORIZONTAL', factor=0.4)
+            # Now split fresh at the desired factor
+            old_areas = set(screen.areas)
+            with context.temp_override(window=window, screen=screen, area=view_3d):
+                bpy.ops.screen.area_split(direction='HORIZONTAL', factor=self.factor)
 
+            new_area = (set(screen.areas) - old_areas).pop()
+            new_area.type = 'FILE_BROWSER'
+            new_area.ui_type = 'ASSETS'
+            self.report({'INFO'}, f"Bottom areas reset → Asset Browser opened at {int(self.factor*100)}% height")
+            return {'FINISHED'}
+
+        return {'CANCELLED'}
+
+
+
+    # def execute(self, context):
+        # screen = context.screen
+
+        # # --- CASE: CLOSE ---
+        # asset_area = next((a for a in screen.areas
+                           # if a.type == 'FILE_BROWSER' and a.ui_type == 'ASSETS'), None)
+
+        # if asset_area:
+            # # Switch back to 3D View and close the area
+            # asset_area.type = 'VIEW_3D'
+            # with context.temp_override(screen=screen, area=asset_area):
+                # bpy.ops.screen.area_close()
+            # return {'FINISHED'}
+
+        # # --- CASE: OPEN ---
+        # view_3d = next((a for a in screen.areas if a.type == 'VIEW_3D'), None)
+        # if view_3d:
+            # old_areas = set(screen.areas)
+
+            # with context.temp_override(screen=screen, area=view_3d):
+                # bpy.ops.screen.area_split(direction='HORIZONTAL', factor=0.4)
+
+            # new_area = (set(screen.areas) - old_areas).pop()
+            # new_area.type = 'FILE_BROWSER'
+            # new_area.ui_type = 'ASSETS'
+            # return {'FINISHED'}
+
+        # return {'CANCELLED'}
+       # 2. Setup for split
         def set_asset_mode():
             # Find the NEW area by comparing current areas to the original list
             new_areas = [a for a in screen.areas if a not in original_areas]
@@ -190,22 +242,25 @@ class WM_OT_select_linked_objects(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         scene = context.scene
-        
-        # Ensure an item is selected and it's not a category header
-        if not scene.linked_items or len(scene.linked_items) <= scene.linked_items_index < 0:
-            return False
-            
-        selected_item = scene.linked_items[scene.linked_items_index]
-        if selected_item.is_category:
+        props = getattr(scene, "my_scene_props", None)
+        if not props:
             return False
 
-        # Ensure the selected item is one of the types we can use for selection
+        # Ensure an item is selected
+        if not props.libraries or props.active_library_index < 0 or props.active_library_index >= len(props.libraries):
+            return False
+
+        selected_item = props.libraries[props.active_library_index]
+
+        # Only enable for supported types
         allowed_types = {'OBJECT_DATA', 'OUTLINER_COLLECTION', 'MESH_DATA', 'MATERIAL'}
         return selected_item.icon in allowed_types
 
+
     def execute(self, context):
         scene = context.scene
-        selected_item = scene.linked_items[scene.linked_items_index] 
+        props = scene.my_scene_props
+        selected_item = props.libraries[props.active_library_index] 
         data_name = selected_item.name
         data_type_icon = selected_item.icon
         
@@ -227,66 +282,47 @@ class WM_OT_select_linked_objects(bpy.types.Operator):
         # Deselect all objects first
         bpy.ops.object.select_all(action='DESELECT')
         selected_count = 0
-        
-        # Store objects to select after iteration
         objects_to_select = []
 
         # 2. Iterate and check for usage by scene objects
         for obj in context.scene.objects:
             is_user = False
             
-            # Case 1: Linked Object (e.g., camera, light, empty)
             if data_type_icon == 'OBJECT_DATA' and obj == data_block:
                 is_user = True
-            
-            # Case 2: Linked Collection (used by Collection Instance object/Empty)
             elif data_type_icon == 'OUTLINER_COLLECTION':
                 if obj.instance_type == 'COLLECTION' and obj.instance_collection == data_block:
                     is_user = True
-            
-            # Case 3: Linked Mesh Data (used by Mesh Objects)
             elif data_type_icon == 'MESH_DATA':
                 if obj.type == 'MESH' and obj.data == data_block:
                     is_user = True
-            
-            # Case 4: Linked Material (used by any object/data that holds materials)
             elif data_type_icon == 'MATERIAL':
-                # Check obj's data block (e.g., Mesh, Curve) for the material
                 if obj.data and data_block in getattr(obj.data, 'materials', []):
                     is_user = True
-                # Fallback/alternative check (for linked materials in object slots)
-                elif data_block in obj.material_slots:
+                elif data_block in [slot.material for slot in obj.material_slots if slot.material]:
                     is_user = True
             
-            # 3. Queue object if it's a user and is visible/selectable
             if is_user:
-                # IMPORTANT: Only select if the object is visible (not hidden)
                 if not obj.hide_get() and not obj.hide_viewport and not obj.hide_select:
                     objects_to_select.append(obj)
 
-        # 4. Apply Selection and Handle Errors
         for obj in objects_to_select:
             try:
-                # This is the line that throws the error if the object is filtered out 
-                # of the active View Layer (e.g., via the Outliner's visibility toggles or View Layer settings).
                 obj.select_set(True)
                 selected_count += 1
             except RuntimeError:
-                # We skip selection for this object but continue the loop.
                 continue
 
-        # 5. Provide Feedback
         if selected_count > 0:
-            # Set the last successfully selected object as active
             active_objects = [o for o in context.scene.objects if o.select_get()]
             if active_objects:
                 context.view_layer.objects.active = active_objects[-1]
             self.report({'INFO'}, f"Selected {selected_count} object(s) using linked data '{data_name}'.")
         else:
-            # CUSTOM MESSAGE REQUESTED: "The objects was not found in the scene"
             self.report({'WARNING'}, "The objects was not found in the scene.")
             
         return {'FINISHED'}
+
 
 class WM_OT_reload_library(bpy.types.Operator):
     bl_idname = "wm.reload_library"
@@ -436,8 +472,8 @@ class WM_OT_path_relative(bpy.types.Operator):
         screen = context.screen
         bpy.ops.file.make_paths_relative()
 
-class WM_OT_toggle_outliner_vertical(bpy.types.Operator):
-    bl_idname = "wm.toggle_outliner_vertical"
+class WM_OT_show_outliner_vertical(bpy.types.Operator):
+    bl_idname = "wm.show_outliner_vertical"
     bl_label = "Toggle Outliner Vertical"
     bl_description = "Opens or closes the Outliner in a vertical side panel"
     bl_options = {'REGISTER', 'UNDO'}
@@ -445,43 +481,53 @@ class WM_OT_toggle_outliner_vertical(bpy.types.Operator):
     def execute(self, context):
         screen = context.screen
         
-        # 1. Search for existing Outliner
-        outliner_area = next((a for a in screen.areas if a.ui_type == 'OUTLINER'), None)
+        # 1. Identify the left-side Outliner (x < 10)
+        left_outliner = next((a for a in screen.areas if a.ui_type == 'OUTLINER' and a.x < 10), None)
 
-        if outliner_area:
-            with context.temp_override(area=outliner_area):
+        # --- CASE: CLOSE ---
+        if left_outliner:
+            left_outliner.ui_type = 'VIEW_3D'
+            with context.temp_override(screen=screen, area=left_outliner):
                 bpy.ops.screen.area_close()
             return {'FINISHED'}
 
-        # 2. Setup for split
-        original_areas = set(screen.areas)
-        bpy.ops.screen.area_split(direction='VERTICAL', factor=0.2)
-
-        def configure_outliner():
-            new_areas = [a for a in screen.areas if a not in original_areas]
+        # --- CASE: OPEN ---
+        view_3d = next((a for a in screen.areas if a.type == 'VIEW_3D'), None)
+        
+        if view_3d:
+            old_areas = set(screen.areas)
             
-            if new_areas:
-                target = new_areas[0]
-                # Set to Outliner
-                target.ui_type = 'OUTLINER'
+            with context.temp_override(screen=screen, area=view_3d):
+                bpy.ops.screen.area_split(direction='VERTICAL', factor=0.2)
+            
+            def configure_outliner():
+                new_areas = [a for a in screen.areas if a not in old_areas]
                 
-                # Access the Outliner settings
-                space = target.spaces.active
-                if space.type == 'OUTLINER':
-                    # Set Display Mode to 'Blend File'
-                    space.display_mode = 'LIBRARIES'
+                if new_areas:
+                    target = min(new_areas, key=lambda a: a.x)
+                    target.ui_type = 'OUTLINER'
                     
-                    # Collapse all hierarchies
-                    with context.temp_override(area=target):
-                        bpy.ops.outliner.show_hierarchy_stats() # This toggles/refreshes view
-                        # We use the generic 'Close All' operator
-                        bpy.ops.outliner.show_one_level(open=False)
+                    space = target.spaces.active
+                    if space and space.type == 'OUTLINER':
+                        space.display_mode = 'LIBRARIES'
+                        
+                        # FIND THE WINDOW REGION
+                        # Outliner operators require 'WINDOW' region to poll()
+                        target_region = next((r for r in target.regions if r.type == 'WINDOW'), None)
+                        
+                        if target_region:
+                            with context.temp_override(area=target, region=target_region):
+                                # Now the operator has the correct Area AND Region context
+                                try:
+                                    bpy.ops.outliner.show_one_level()
+                                except Exception as e:
+                                    print(f"Outliner sync delay: {e}")
                 return None
-            
-            return 0.01
 
-        bpy.app.timers.register(configure_outliner, first_interval=0.01)
+            bpy.app.timers.register(configure_outliner, first_interval=0.01) # Slightly longer delay for stability
+                
         return {'FINISHED'}
+
 
 # Registration (for testing in the Text Editor)
 def register():
@@ -497,7 +543,7 @@ classes = (
     WM_OT_set_asset_import_link,
     WM_OT_set_asset_browser_import_link,
     WM_OT_library_prefs,
-    WM_OT_toggle_asset_browser,
+    WM_OT_show_asset_browser,
     WM_OT_toggle_linked_category,
     WM_OT_toggle_relative_path,
     WM_OT_toggle_all_linked_categories,
@@ -508,7 +554,7 @@ classes = (
     WM_OT_cleanup_libraries,
     WM_OT_refresh_libraries,
     WM_OT_missing_files,
-    WM_OT_toggle_outliner_vertical,
+    WM_OT_show_outliner_vertical,
 )
 
 def register():
