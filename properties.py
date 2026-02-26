@@ -11,6 +11,7 @@ class LinkedAssetItem(bpy.types.PropertyGroup):
     is_expanded: bpy.props.BoolProperty(default=False)
     lib_path: bpy.props.StringProperty()
     asset_id: bpy.props.StringProperty()
+    is_broken: bpy.props.BoolProperty(default=False) # <--- Add this
     is_collection: bpy.props.BoolProperty()
 
 # =========================================================================

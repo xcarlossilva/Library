@@ -49,7 +49,15 @@ def update_linked_items_list(scene=None, context=None):
             if lib and asset_info:
                 lib_name = lib.name
                 if lib_name not in lib_groups:
-                    lib_groups[lib_name] = {"path": lib.filepath, "assets": set()}
+                    # Resolve the path to absolute so os.path can find it
+                    abs_path = bpy.path.abspath(lib.filepath)
+                    is_broken = not os.path.exists(abs_path)
+                    
+                    lib_groups[lib_name] = {
+                    "path": lib.filepath, 
+                    "assets": set(),
+                    "is_broken": is_broken
+                    }
                 lib_groups[lib_name]["assets"].add(asset_info)
 
         # 6. REBUILD: Add the data back to the CollectionProperty
@@ -62,6 +70,7 @@ def update_linked_items_list(scene=None, context=None):
             parent.is_library = True
             parent.lib_path = data["path"]
             parent.is_expanded = expansion_states.get(data["path"], False)
+            parent.is_broken = data["is_broken"]
 
             # Add Child Assets
             for asset_name, is_coll in sorted(data["assets"]):

@@ -158,7 +158,7 @@ class VIEW3D_PT_libraries_list(bpy.types.Panel):
                 box.label(text="ASSET PATH", icon='FILE_BLEND')
                 row = box.row(align=True)
                 row.prop(lib_data, "filepath", text="")
-                op = row.operator("wm.relocate_library", text="", icon='ANIM')
+                op = row.operator("wm.relocate_library", text="", icon='FILE_ALIAS')
                 op.library_name = lib_data.name
         
         layout.label(text="Edit linked files")
@@ -179,25 +179,41 @@ class VIEW3D_UL_libraries(bpy.types.UIList):
         row = layout.row(align=True)
 
         if item.is_library:
+            # Handle the folder icon/warning
+            main_icon = 'ERROR' if item.is_broken else 'ERROR'
+            
             # Library Header
             icon_type = 'DISCLOSURE_TRI_DOWN' if item.is_expanded else 'DISCLOSURE_TRI_RIGHT'
             row.prop(item, "is_expanded", text="", icon=icon_type, emboss=False)
-            row.label(text=item.name)
-
+            # row.label(text=item.name)
+            
+            if item.is_broken:
+                row.label(text= item.name, icon='CANCEL_LARGE')
+            else:
+                row.label(text=item.name)
+            
+               
             # Right-aligned utility buttons
             button_row = row.row(align=True)
-            op = button_row.operator("wm.reload_library", text="", icon="FILE_REFRESH", emboss=False)
-            op.library_name = item.name
+            
+            if item.is_broken:
+                row.operator("wm.relocate_library", text="", icon='FILE_ALIAS')
+            else:
+                op = button_row.operator("wm.reload_library", text="", icon="FILE_REFRESH", emboss=False)
+                op.library_name = item.name
 
-            op = button_row.operator("wm.open_library", text="", icon="BLENDER", emboss=False)
-            op.library_name = item.name
-
+                op = button_row.operator("wm.open_library", text="", icon="BLENDER", emboss=False)
+                op.library_name = item.name
+            
             op = button_row.operator("wm.delete_library", text="", icon="TRASH", emboss=False)
             op.library_name = item.name
+                
         else:
-            # Child Asset (Indented)
+            # Child items
             row.separator(factor=2.0)
-            sub_icon = 'OUTLINER_COLLECTION' if item.is_collection else 'OBJECT_DATA'
+            # If the library is broken, the children should probably look "disabled"
+            sub_icon = 'CANCEL' if item.is_broken else ('OUTLINER_COLLECTION' if item.is_collection else 'OBJECT_DATA')
+            row.enabled = not item.is_broken # Disable clicking on items from missing files
             row.label(text=item.name, icon=sub_icon)
 
     def filter_items(self, context, data, propname):
