@@ -1,9 +1,12 @@
 import bpy
 import os
 import subprocess
-from .utils import absolute_path, update_linked_items_list
+from bpy_extras.io_utils import ImportHelper
+from .utils import auto_update_linked_handler, select_instances_internal, update_linked_items_list
 
 
+def absolute_path(relpath):
+    return os.path.abspath(bpy.path.abspath(relpath))
 
 class WM_OT_link_files(bpy.types.Operator):
     bl_idname = "wm.link_files"
@@ -199,6 +202,10 @@ class WM_OT_show_asset_browser(bpy.types.Operator):
         bpy.app.timers.register(set_asset_mode, first_interval=0.01)
         return {'FINISHED'}
 
+
+
+
+
 class WM_OT_toggle_linked_category(bpy.types.Operator):
     bl_idname = "wm.toggle_linked_category"
     bl_label = "Toggle Linked Data Category"
@@ -220,109 +227,17 @@ class WM_OT_toggle_all_linked_categories(bpy.types.Operator):
     
     def execute(self, context):
         scene = context.scene
-        if not scene.linked_categories:
-            self.report({'INFO'}, "No categories available to toggle.")
-            return {'CANCELLED'}
-        should_expand = not all(c.is_expanded for c in scene.linked_categories)
-        for category in scene.linked_categories:
-            category.is_expanded = should_expand
-        update_linked_items_list(scene, context)
-        action = "Expanded" if should_expand else "Collapsed"
-        self.report({'INFO'}, f"{action} all categories.")
+        first_lib = next((i for i in scene.linked_assets_list if i.is_library), None)
+        if first_lib:
+            target_state = not first_lib.is_expanded
+            for item in scene.linked_assets_list:
+                if item.is_library: item.is_expanded = target_state
         return {'FINISHED'}
 
-class WM_OT_select_linked_objects(bpy.types.Operator):
-    """
-    Selects only visible scene objects (Objects and Empties) that use the 
-    currently selected linked data block (Mesh, Material, Collection, or Object).
-    """
-    bl_idname = "wm.select_linked_objects"
-    bl_label = "Select Users of Linked Data"
-    
-    @classmethod
-    def poll(cls, context):
-        scene = context.scene
-        props = getattr(scene, "my_scene_props", None)
-        if not props:
-            return False
 
-        # Ensure an item is selected
-        if not props.libraries or props.active_library_index < 0 or props.active_library_index >= len(props.libraries):
-            return False
-
-        selected_item = props.libraries[props.active_library_index]
-
-        # Only enable for supported types
-        allowed_types = {'OBJECT_DATA', 'OUTLINER_COLLECTION', 'MESH_DATA', 'MATERIAL'}
-        return selected_item.icon in allowed_types
-
-
-    def execute(self, context):
-        scene = context.scene
-        props = scene.my_scene_props
-        selected_item = props.libraries[props.active_library_index] 
-        data_name = selected_item.name
-        data_type_icon = selected_item.icon
-        
-        data_block = None
-        # 1. Get the actual Data Block from Blender data collections
-        if data_type_icon == 'OBJECT_DATA':
-            data_block = bpy.data.objects.get(data_name)
-        elif data_type_icon == 'OUTLINER_COLLECTION':
-            data_block = bpy.data.collections.get(data_name)
-        elif data_type_icon == 'MESH_DATA':
-            data_block = bpy.data.meshes.get(data_name)
-        elif data_type_icon == 'MATERIAL':
-            data_block = bpy.data.materials.get(data_name)
-
-        if not data_block:
-            self.report({'ERROR'}, f"Selected data block '{data_name}' not found in current scene data.")
-            return {'CANCELLED'}
-
-        # Deselect all objects first
-        bpy.ops.object.select_all(action='DESELECT')
-        selected_count = 0
-        objects_to_select = []
-
-        # 2. Iterate and check for usage by scene objects
-        for obj in context.scene.objects:
-            is_user = False
-            
-            if data_type_icon == 'OBJECT_DATA' and obj == data_block:
-                is_user = True
-            elif data_type_icon == 'OUTLINER_COLLECTION':
-                if obj.instance_type == 'COLLECTION' and obj.instance_collection == data_block:
-                    is_user = True
-            elif data_type_icon == 'MESH_DATA':
-                if obj.type == 'MESH' and obj.data == data_block:
-                    is_user = True
-            elif data_type_icon == 'MATERIAL':
-                if obj.data and data_block in getattr(obj.data, 'materials', []):
-                    is_user = True
-                elif data_block in [slot.material for slot in obj.material_slots if slot.material]:
-                    is_user = True
-            
-            if is_user:
-                if not obj.hide_get() and not obj.hide_viewport and not obj.hide_select:
-                    objects_to_select.append(obj)
-
-        for obj in objects_to_select:
-            try:
-                obj.select_set(True)
-                selected_count += 1
-            except RuntimeError:
-                continue
-
-        if selected_count > 0:
-            active_objects = [o for o in context.scene.objects if o.select_get()]
-            if active_objects:
-                context.view_layer.objects.active = active_objects[-1]
-            self.report({'INFO'}, f"Selected {selected_count} object(s) using linked data '{data_name}'.")
-        else:
-            self.report({'WARNING'}, "The objects was not found in the scene.")
-            
-        return {'FINISHED'}
-
+# =========================================================================
+# OPERATORS: File Actions
+# =========================================================================
 
 class WM_OT_reload_library(bpy.types.Operator):
     bl_idname = "wm.reload_library"
@@ -411,7 +326,80 @@ class WM_OT_delete_library(bpy.types.Operator):
             self.report({'ERROR'}, f"Failed to delete library '{self.library_name}': {e}")
             
         return {'FINISHED'}
-    
+
+class WM_OT_relocate_library(bpy.types.Operator, ImportHelper):
+    """Changes the source path of the selected library"""
+    bl_idname = "wm.relocate_library"
+    bl_label = "Relocate Library"
+    filter_glob: bpy.props.StringProperty(default="*.blend", options={'HIDDEN'})
+    library_name: bpy.props.StringProperty()
+
+    def execute(self, context):
+        library = bpy.data.libraries.get(self.library_name)
+        if library:
+            library.filepath = self.filepath
+            update_linked_items_list(context.scene, context)
+            return {'FINISHED'}
+        return {'CANCELLED'}
+
+# =========================================================================
+# OPERATORS: VIEW & SELECTION
+# =========================================================================
+
+class WM_OT_refresh_libraries(bpy.types.Operator):
+    """Force an update of the library list based on scene contents"""
+    bl_idname = "wm.refresh_libraries"
+    bl_label = "Refresh Libraries List"
+
+    def execute(self, context):
+        update_linked_items_list(bpy.context.scene, bpy.context)
+        return {'FINISHED'}
+
+class OBJECT_OT_ToggleAllLinked(bpy.types.Operator):
+    """Expands or collapses all libraries in the list"""
+    bl_idname = "object.toggle_all_linked"
+    bl_label = "Global Toggle"
+
+    def execute(self, context):
+        scene = context.scene
+        first_lib = next((i for i in scene.linked_assets_list if i.is_library), None)
+        if first_lib:
+            target_state = not first_lib.is_expanded
+            for item in scene.linked_assets_list:
+                if item.is_library: item.is_expanded = target_state
+        return {'FINISHED'}
+
+class OBJECT_OT_SelectLinkedFromList(bpy.types.Operator):
+    """Selects objects in the scene belonging to the chosen list item"""
+    bl_idname = "object.select_linked_from_list"
+    bl_label = "Select Instances"
+
+    def execute(self, context):
+        idx = context.scene.linked_assets_index
+        if idx < 0 or idx >= len(context.scene.linked_assets_list): return {'CANCELLED'}
+        item = context.scene.linked_assets_list[idx]
+        select_instances_internal(context.scene, context, item)
+        return {'FINISHED'}
+
+class OBJECT_OT_FocusLinkedSelection(bpy.types.Operator):
+    """Selects objects and frames them in the 3D viewport"""
+    bl_idname = "object.focus_linked_selection"
+    bl_label = "Focus Instances"
+
+    def execute(self, context):
+        idx = context.scene.linked_assets_index
+        if idx < 0 or idx >= len(context.scene.linked_assets_list): return {'CANCELLED'}
+        item = context.scene.linked_assets_list[idx]
+        if select_instances_internal(context.scene, context, item):
+            bpy.ops.view3d.view_selected(use_all_regions=False)
+        else:
+            self.report({'WARNING'}, "No instances found in scene.")
+        return {'FINISHED'}
+
+# =========================================================================
+# OPERATORS: FILE MANAGEMENT
+# =========================================================================
+ 
 class WM_OT_cleanup_libraries(bpy.types.Operator):
     bl_idname = "wm.cleanup_libraries"
     bl_label = "Clean Up Broken Links"
@@ -444,15 +432,7 @@ class WM_OT_cleanup_libraries(bpy.types.Operator):
             self.report({'INFO'}, "No broken library links found to clean up.")
 
         return {'FINISHED'}
-
-class WM_OT_refresh_libraries(bpy.types.Operator):
-    bl_idname = "wm.refresh_libraries"
-    bl_label = "Refresh Libraries List"
-    def execute(self, context):
-        update_linked_items_list(context.scene, context) 
-        self.report({'INFO'}, "Libraries list refreshed")
-        return {'FINISHED'}
- 
+    
 class WM_OT_missing_files(bpy.types.Operator):
     bl_idname = "wm.missing_files"
     bl_label = "Missing Files"
@@ -529,14 +509,14 @@ class WM_OT_show_outliner_vertical(bpy.types.Operator):
         return {'FINISHED'}
 
 
-# Registration (for testing in the Text Editor)
-def register():
-    bpy.utils.register_class(WM_OT_toggle_outliner_vertical)
+# # Registration (for testing in the Text Editor)
+# def register():
+    # bpy.utils.register_class(WM_OT_toggle_outliner_vertical)
 
-if __name__ == "__main__":
-    register()
-    # To run immediately:
-    # bpy.ops.wm.toggle_outliner_vertical()
+# if __name__ == "__main__":
+    # register()
+    # # To run immediately:
+    # # bpy.ops.wm.toggle_outliner_vertical()
 
 classes = (
     WM_OT_link_files,
@@ -544,15 +524,24 @@ classes = (
     WM_OT_set_asset_browser_import_link,
     WM_OT_library_prefs,
     WM_OT_show_asset_browser,
-    WM_OT_toggle_linked_category,
+    
     WM_OT_toggle_relative_path,
+    
+    WM_OT_toggle_linked_category,
     WM_OT_toggle_all_linked_categories,
-    WM_OT_select_linked_objects,
+    
     WM_OT_reload_library,
     WM_OT_open_library,
     WM_OT_delete_library,
-    WM_OT_cleanup_libraries,
+    WM_OT_relocate_library,   
+    
+    OBJECT_OT_ToggleAllLinked,
+    OBJECT_OT_SelectLinkedFromList,
+    OBJECT_OT_FocusLinkedSelection,
     WM_OT_refresh_libraries,
+    
+
+    WM_OT_cleanup_libraries,
     WM_OT_missing_files,
     WM_OT_show_outliner_vertical,
 )
