@@ -4,19 +4,34 @@ import subprocess
 from bpy_extras.io_utils import ImportHelper
 from .utils import auto_update_linked_handler, select_instances_internal, update_linked_items_list
 
+# =========================================================================
+# PF = PREFERENCES
+# WI = WINDOW
+# VW = VIEW
+# SP = SETUP
+# LIST AND ITEMS
+# IT = ITEM
+# =========================================================================
+
 
 def absolute_path(relpath):
     return os.path.abspath(bpy.path.abspath(relpath))
+    
+ 
+# =========================================================================
+# BLENDER PREFERENCES
+# =========================================================================
 
-class WM_OT_link_files(bpy.types.Operator):
-    bl_idname = "wm.link_files"
-    bl_label = "Link Files"
-    bl_description = "Open the file browser to link new files to the scene"
+
+class WM_OT_library_prefs(bpy.types.Operator):
+    bl_idname = "wm.library_prefs"
+    bl_label = "Library Prefs Setup"
+    bl_description = "Open the file library prefs setup"
     
     def execute(self, context):
-        bpy.ops.wm.link('INVOKE_DEFAULT')
+        bpy.ops.screen.userpref_show(section='FILE_PATHS')
         return {'FINISHED'}
-        
+
 class WM_OT_set_asset_import_link(bpy.types.Operator):
     bl_idname = "wm.set_asset_import_link"
     bl_label = "Set Import to Link"
@@ -59,52 +74,22 @@ class WM_OT_toggle_relative_path(bpy.types.Operator):
         prefs.use_relative_paths = True
         context.area.tag_redraw()
         return {'FINISHED'}
-        
-class WM_OT_set_asset_browser_import_link(bpy.types.Operator):
-    bl_idname = "wm.set_asset_browser_import_link"
-    bl_label = "Set Import to Link Asset Browser"
-    bl_description = "Changes the Asset Browser import method to Link"
 
-    @classmethod
-    def poll(cls, context):
-        # 1. Find the Asset Browser area
-        asset_area = next((a for a in context.screen.areas if a.ui_type == 'ASSETS'), None)
-        
-        if asset_area:
-            space = asset_area.spaces.active
-            params = getattr(space, "params", None)
-            
-            if params:
-                # The button is CLICKABLE only if the method is NOT already 'LINK'
-                return params.import_method != 'LINK'
-        
-        # If no Asset Browser is open, we disable the button
-        return False
-   
-    def execute(self, context):
-        asset_area = next((a for a in context.screen.areas if a.ui_type == 'ASSETS'), None)
-        
-        if asset_area:
-            space = asset_area.spaces.active
-            params = getattr(space, "params", None)
-            
-            if params:
-                params.import_method = 'LINK'
-                self.report({'INFO'}, "Import Method: LINK")
-                return {'FINISHED'}
-            
-        self.report({'WARNING'}, "Asset Browser not found")
-        return {'CANCELLED'}
- 
-class WM_OT_library_prefs(bpy.types.Operator):
-    bl_idname = "wm.library_prefs"
-    bl_label = "Library Prefs Setup"
-    bl_description = "Open the file library prefs setup"
+
+# =========================================================================
+# ASSET LINK / BROWSER
+# =========================================================================
+
+    
+class WM_OT_link_files(bpy.types.Operator):
+    bl_idname = "wm.link_files"
+    bl_label = "Link Files"
+    bl_description = "Open the file browser to link new files to the scene"
     
     def execute(self, context):
-        bpy.ops.screen.userpref_show(section='FILE_PATHS')
+        bpy.ops.wm.link('INVOKE_DEFAULT')
         return {'FINISHED'}
-    
+
 class WM_OT_show_asset_browser(bpy.types.Operator):
     bl_idname = "wm.show_asset_browser"
     bl_label = "Toggle Asset Browser"
@@ -202,8 +187,116 @@ class WM_OT_show_asset_browser(bpy.types.Operator):
         bpy.app.timers.register(set_asset_mode, first_interval=0.01)
         return {'FINISHED'}
 
+class WM_OT_set_asset_browser_import_link(bpy.types.Operator):
+    bl_idname = "wm.set_asset_browser_import_link"
+    bl_label = "Set Import to Link Asset Browser"
+    bl_description = "Changes the Asset Browser import method to Link"
+
+    @classmethod
+    def poll(cls, context):
+        # 1. Find the Asset Browser area
+        asset_area = next((a for a in context.screen.areas if a.ui_type == 'ASSETS'), None)
+        
+        if asset_area:
+            space = asset_area.spaces.active
+            params = getattr(space, "params", None)
+            
+            if params:
+                # The button is CLICKABLE only if the method is NOT already 'LINK'
+                return params.import_method != 'LINK'
+        
+        # If no Asset Browser is open, we disable the button
+        return False
+   
+    def execute(self, context):
+        asset_area = next((a for a in context.screen.areas if a.ui_type == 'ASSETS'), None)
+        
+        if asset_area:
+            space = asset_area.spaces.active
+            params = getattr(space, "params", None)
+            
+            if params:
+                params.import_method = 'LINK'
+                self.report({'INFO'}, "Import Method: LINK")
+                return {'FINISHED'}
+            
+        self.report({'WARNING'}, "Asset Browser not found")
+        return {'CANCELLED'} 
 
 
+# =========================================================================
+# LIST ACTIONS - HIDE AND UNHIDE MAIN ITEM
+# =========================================================================
+
+class WM_OT_show_outliner_vertical(bpy.types.Operator):
+    bl_idname = "wm.show_outliner_vertical"
+    bl_label = "Toggle Outliner Vertical"
+    bl_description = "Opens or closes the Outliner in a vertical side panel"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        screen = context.screen
+        
+        # 1. Identify the left-side Outliner (x < 10)
+        left_outliner = next((a for a in screen.areas if a.ui_type == 'OUTLINER' and a.x < 10), None)
+
+        # --- CASE: CLOSE ---
+        if left_outliner:
+            left_outliner.ui_type = 'VIEW_3D'
+            with context.temp_override(screen=screen, area=left_outliner):
+                bpy.ops.screen.area_close()
+            return {'FINISHED'}
+
+        # --- CASE: OPEN ---
+        view_3d = next((a for a in screen.areas if a.type == 'VIEW_3D'), None)
+        
+        if view_3d:
+            old_areas = set(screen.areas)
+            
+            with context.temp_override(screen=screen, area=view_3d):
+                bpy.ops.screen.area_split(direction='VERTICAL', factor=0.2)
+            
+            def configure_outliner():
+                new_areas = [a for a in screen.areas if a not in old_areas]
+                
+                if new_areas:
+                    target = min(new_areas, key=lambda a: a.x)
+                    target.ui_type = 'OUTLINER'
+                    
+                    space = target.spaces.active
+                    if space and space.type == 'OUTLINER':
+                        space.display_mode = 'LIBRARIES'
+                        
+                        # FIND THE WINDOW REGION
+                        # Outliner operators require 'WINDOW' region to poll()
+                        target_region = next((r for r in target.regions if r.type == 'WINDOW'), None)
+                        
+                        if target_region:
+                            with context.temp_override(area=target, region=target_region):
+                                # Now the operator has the correct Area AND Region context
+                                try:
+                                    bpy.ops.outliner.show_one_level()
+                                except Exception as e:
+                                    print(f"Outliner sync delay: {e}")
+                return None
+
+            bpy.app.timers.register(configure_outliner, first_interval=0.01) # Slightly longer delay for stability
+                
+        return {'FINISHED'}
+
+class WM_OT_refresh_libraries(bpy.types.Operator):
+    """Force an update of the library list based on scene contents"""
+    bl_idname = "wm.refresh_libraries"
+    bl_label = "Refresh Libraries List"
+
+    def execute(self, context):
+        update_linked_items_list(bpy.context.scene, bpy.context)
+        return {'FINISHED'}
+
+
+# =========================================================================
+# LIST ACTIONS - HIDE AND UNHIDE MAIN ITEM
+# =========================================================================
 
 
 class WM_OT_toggle_linked_category(bpy.types.Operator):
@@ -236,8 +329,9 @@ class WM_OT_toggle_all_linked_categories(bpy.types.Operator):
 
 
 # =========================================================================
-# OPERATORS: File Actions
+# LIST ITEMS: LINKED FILES ACTIONS
 # =========================================================================
+
 
 class WM_OT_reload_library(bpy.types.Operator):
     bl_idname = "wm.reload_library"
@@ -342,18 +436,11 @@ class WM_OT_relocate_library(bpy.types.Operator, ImportHelper):
             return {'FINISHED'}
         return {'CANCELLED'}
 
+
 # =========================================================================
-# OPERATORS: VIEW & SELECTION
+# OBJECT: VIEW & SELECTION
 # =========================================================================
 
-class WM_OT_refresh_libraries(bpy.types.Operator):
-    """Force an update of the library list based on scene contents"""
-    bl_idname = "wm.refresh_libraries"
-    bl_label = "Refresh Libraries List"
-
-    def execute(self, context):
-        update_linked_items_list(bpy.context.scene, bpy.context)
-        return {'FINISHED'}
 
 class OBJECT_OT_ToggleAllLinked(bpy.types.Operator):
     """Expands or collapses all libraries in the list"""
@@ -376,33 +463,107 @@ class OBJECT_OT_SelectLinkedFromList(bpy.types.Operator):
 
     def execute(self, context):
         idx = context.scene.linked_assets_index
-        if idx < 0 or idx >= len(context.scene.linked_assets_list): return {'CANCELLED'}
+        bpy.ops.wm.reveal_all_objects()
+        
+        if idx < 0 or idx >= len(context.scene.linked_assets_list):
+            return {'CANCELLED'}
+            
         item = context.scene.linked_assets_list[idx]
-        select_instances_internal(context.scene, context, item)
+        
+        # 1. Capture the count from the internal function
+        from .utils import select_instances_internal
+        count = select_instances_internal(context.scene, context, item)
+        
+        # 2. Create the report message
+        if count > 0:
+            msg = f"Selected {count} object(s) from '{item.name}'"
+            self.report({'INFO'}, msg)
+        else:
+            self.report({'WARNING'}, f"No visible instances of '{item.name}' found in this view layer.")
+
         return {'FINISHED'}
 
-class OBJECT_OT_FocusLinkedSelection(bpy.types.Operator):
+class OBJECT_OT_FocusLinkedFromList(bpy.types.Operator):
     """Selects objects and frames them in the 3D viewport"""
-    bl_idname = "object.focus_linked_selection"
+    bl_idname = "object.focus_linked_from_list"
     bl_label = "Focus Instances"
+    bl_options = {'REGISTER', 'UNDO'}
+   
+    def execute(self, context):
+        scene = context.scene
+        bpy.ops.wm.reveal_all_objects()
+        # Ensure we have a valid index
+        if scene.linked_assets_index >= len(scene.linked_assets_list):
+            return {'CANCELLED'}
+            
+        item = scene.linked_assets_list[scene.linked_assets_index]
+
+        from .utils import select_instances_internal
+        success = select_instances_internal(scene, context, item)
+
+        if success:
+            # Find the correct area and region to focus
+            for area in context.screen.areas:
+                if area.type == 'VIEW_3D':
+                    for region in area.regions:
+                        if region.type == 'WINDOW':
+                            # --- THE FIX FOR BLENDER 4.0+ / 5.x ---
+                            override = {'area': area, 'region': region}
+                            with context.temp_override(**override):
+                                bpy.ops.view3d.view_selected(use_all_regions=False)
+                            # --------------------------------------
+                            return {'FINISHED'}
+        
+        self.report({'WARNING'}, "No visible objects found to focus.")
+        return {'CANCELLED'}
+
+class WM_OT_reveal_all_objects(bpy.types.Operator):
+    """Enable all global selection and visibility filters in the viewport"""
+    bl_idname = "wm.reveal_all_objects"
+    bl_label = "Reveal All Restrictions"
+    bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        idx = context.scene.linked_assets_index
-        if idx < 0 or idx >= len(context.scene.linked_assets_list): return {'CANCELLED'}
-        item = context.scene.linked_assets_list[idx]
-        if select_instances_internal(context.scene, context, item):
-            bpy.ops.view3d.view_selected(use_all_regions=False)
-        else:
-            self.report({'WARNING'}, "No instances found in scene.")
+        # 1. Clear individual object restrictions (Eye and Arrow in Outliner)
+        for obj in context.scene.objects:
+            obj.hide_viewport = False
+            obj.hide_select = False
+
+        # 2. Target the 'Object Type Visibility' (The Popover from your image)
+        for area in context.screen.areas:
+            if area.type == 'VIEW_3D':
+                for space in area.spaces:
+                    if space.type == 'VIEW_3D':
+                        # Ensure Master Overlays are on
+                        space.overlay.show_overlays = True
+                        
+                        # --- DYNAMIC FIX FOR ALL TYPES ---
+                        # This replaces the long list of manual properties
+                        for attr in dir(space):
+                            if attr.startswith("show_object_"):
+                                try:
+                                    setattr(space, attr, True)
+                                except:
+                                    # Skip read-only or non-boolean properties
+                                    continue
+                        
+                        # Ensure selection highlighting is also enabled
+                        if hasattr(space.overlay, "show_selection"):
+                            space.overlay.show_selection = True
+
         return {'FINISHED'}
+
 
 # =========================================================================
 # OPERATORS: FILE MANAGEMENT
 # =========================================================================
  
+ 
 class WM_OT_cleanup_libraries(bpy.types.Operator):
     bl_idname = "wm.cleanup_libraries"
     bl_label = "Clean Up Broken Links"
+    bl_description = "Remove all the broken linked files at once"
+    bl_options = {'REGISTER', 'UNDO'}
     
     def invoke(self, context, event):
         """Opens a small 'OK?' popup at the mouse position before executing"""
@@ -442,93 +603,69 @@ class WM_OT_missing_files(bpy.types.Operator):
         bpy.ops.file.find_missing_files('INVOKE_DEFAULT')
         return {'FINISHED'} 
 
+
 class WM_OT_path_relative(bpy.types.Operator):
     bl_idname = "wm.path_relative"
     bl_label = "Relative Paths"
-    bl_description = "Linked assets as relative pathsl"
+    bl_description = "Convert all external linked paths to relative"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        screen = context.screen
-        bpy.ops.file.make_paths_relative()
+        try:
+            # 1. Run the built-in Blender command
+            bpy.ops.file.make_paths_relative()
+            
+            # 2. Trigger your custom list update to refresh the "is_broken" status
+            from .utils import update_linked_items_list
+            update_linked_items_list(context.scene)
+            
+            self.report({'INFO'}, "All paths converted to relative")
+            
+            # --- THE FIX: Return a set ---
+            return {'FINISHED'} 
+            
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to convert paths: {e}")
+            return {'CANCELLED'}
 
-class WM_OT_show_outliner_vertical(bpy.types.Operator):
-    bl_idname = "wm.show_outliner_vertical"
-    bl_label = "Toggle Outliner Vertical"
-    bl_description = "Opens or closes the Outliner in a vertical side panel"
+class WM_OT_path_absolute(bpy.types.Operator):
+    bl_idname = "wm.path_absolute"
+    bl_label = "Make Paths Absolute"
+    bl_description = "Convert all external linked paths to absolute (full system paths)"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        screen = context.screen
-        
-        # 1. Identify the left-side Outliner (x < 10)
-        left_outliner = next((a for a in screen.areas if a.ui_type == 'OUTLINER' and a.x < 10), None)
-
-        # --- CASE: CLOSE ---
-        if left_outliner:
-            left_outliner.ui_type = 'VIEW_3D'
-            with context.temp_override(screen=screen, area=left_outliner):
-                bpy.ops.screen.area_close()
+        try:
+            # 1. Run the built-in Blender command for absolute paths
+            bpy.ops.file.make_paths_absolute()
+            
+            # 2. Refresh your UI list to reflect any changes in 'is_broken' status
+            # This ensures the warning icons update immediately
+            from .utils import update_linked_items_list
+            update_linked_items_list(context.scene)
+            
+            self.report({'INFO'}, "All paths converted to absolute")
             return {'FINISHED'}
-
-        # --- CASE: OPEN ---
-        view_3d = next((a for a in screen.areas if a.type == 'VIEW_3D'), None)
-        
-        if view_3d:
-            old_areas = set(screen.areas)
             
-            with context.temp_override(screen=screen, area=view_3d):
-                bpy.ops.screen.area_split(direction='VERTICAL', factor=0.2)
-            
-            def configure_outliner():
-                new_areas = [a for a in screen.areas if a not in old_areas]
-                
-                if new_areas:
-                    target = min(new_areas, key=lambda a: a.x)
-                    target.ui_type = 'OUTLINER'
-                    
-                    space = target.spaces.active
-                    if space and space.type == 'OUTLINER':
-                        space.display_mode = 'LIBRARIES'
-                        
-                        # FIND THE WINDOW REGION
-                        # Outliner operators require 'WINDOW' region to poll()
-                        target_region = next((r for r in target.regions if r.type == 'WINDOW'), None)
-                        
-                        if target_region:
-                            with context.temp_override(area=target, region=target_region):
-                                # Now the operator has the correct Area AND Region context
-                                try:
-                                    bpy.ops.outliner.show_one_level()
-                                except Exception as e:
-                                    print(f"Outliner sync delay: {e}")
-                return None
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to convert paths: {e}")
+            return {'CANCELLED'}
 
-            bpy.app.timers.register(configure_outliner, first_interval=0.01) # Slightly longer delay for stability
-                
-        return {'FINISHED'}
-
-
-# # Registration (for testing in the Text Editor)
-# def register():
-    # bpy.utils.register_class(WM_OT_toggle_outliner_vertical)
-
-# if __name__ == "__main__":
-    # register()
-    # # To run immediately:
-    # # bpy.ops.wm.toggle_outliner_vertical()
 
 classes = (
-    WM_OT_link_files,
-    WM_OT_set_asset_import_link,
-    WM_OT_set_asset_browser_import_link,
     WM_OT_library_prefs,
-    WM_OT_show_asset_browser,
-    
+    WM_OT_set_asset_import_link,
     WM_OT_toggle_relative_path,
+    WM_OT_set_asset_browser_import_link,
+    
+    WM_OT_link_files,
+    WM_OT_show_asset_browser,
     
     WM_OT_toggle_linked_category,
     WM_OT_toggle_all_linked_categories,
+    
+    WM_OT_show_outliner_vertical,
+    WM_OT_refresh_libraries,
     
     WM_OT_reload_library,
     WM_OT_open_library,
@@ -537,13 +674,15 @@ classes = (
     
     OBJECT_OT_ToggleAllLinked,
     OBJECT_OT_SelectLinkedFromList,
-    OBJECT_OT_FocusLinkedSelection,
-    WM_OT_refresh_libraries,
+    OBJECT_OT_FocusLinkedFromList,
     
 
     WM_OT_cleanup_libraries,
     WM_OT_missing_files,
-    WM_OT_show_outliner_vertical,
+    WM_OT_path_relative,
+    WM_OT_path_absolute,
+    
+    WM_OT_reveal_all_objects,
 )
 
 def register():

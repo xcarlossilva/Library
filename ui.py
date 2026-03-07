@@ -9,7 +9,7 @@ class VIEW3D_PT_library_main(bpy.types.Panel):
     bl_idname = "VIEW3D_PT_library_main"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = 'Item'
+    bl_category = 'Library Manager'
 
     def draw(self, context):
         layout = self.layout
@@ -18,7 +18,7 @@ class VIEW3D_PT_library_main(bpy.types.Panel):
         layout.label(text="Link Assets")
 
 class VIEW3D_PT_library_preferences(bpy.types.Panel):
-    bl_label = "Asset / Library Setup"
+    bl_label = "Setup"
     bl_idname = "VIEW3D_PT_library_preferences"
     bl_parent_id = "VIEW3D_PT_library_main" # <--- THIS LINKS THEM
     bl_space_type = 'VIEW_3D'
@@ -49,7 +49,7 @@ class VIEW3D_PT_library_preferences(bpy.types.Panel):
         row.operator("wm.toggle_relative_path", text=btn_text, icon=btn_icon,depress=is_relative)
            
 class VIEW3D_PT_assetbrowser_preferences(bpy.types.Panel):
-    bl_label = "Assets"
+    bl_label = "Assets / Library "
     bl_idname = "VIEW3D_PT_assetbrowser_preferences"
     bl_parent_id = "VIEW3D_PT_library_main" # <--- THIS LINKS THEM
     bl_space_type = 'VIEW_3D'
@@ -73,13 +73,13 @@ class VIEW3D_PT_assetbrowser_preferences(bpy.types.Panel):
         text = 'Linked!' if is_link else 'FORCE set Linked'
         
         # If the poll above is False, this button grays out automatically
-        layout.operator("wm.link_files", text="Link Files", icon="LINK_BLEND")
+        layout.operator("wm.link_files", text="Link Assets", icon="LINK_BLEND")
         layout.operator("wm.show_asset_browser", text="Asset Browser", icon="ASSET_MANAGER")
         layout.operator("wm.set_asset_browser_import_link", icon=icon, text=text,depress=is_link)
 
 class VIEW3D_PT_libraries_list(bpy.types.Panel):
     """Creates a Panel in the 3D Viewport under the Item tab listing library file paths"""
-    bl_label = "Scene linked files"
+    bl_label = "Scene Linked Assets"
     bl_idname = "VIEW3D_PT_libraries_list"
     bl_parent_id = "VIEW3D_PT_library_main" # <--- THIS LINKS THEM
     bl_space_type = 'VIEW_3D'
@@ -91,6 +91,10 @@ class VIEW3D_PT_libraries_list(bpy.types.Panel):
         layout = self.layout
         scene = context.scene 
         
+        
+        layout.operator("wm.show_outliner_vertical", text="Library Outline", icon="OUTLINER")
+        layout.operator("wm.refresh_libraries", text="Add / Refresh - List", icon="FILE_REFRESH")
+       
     # 1. Check if list is empty first
         if not scene.linked_assets_list:
             layout.label(text="No linked assets found.", icon='INFO')
@@ -100,11 +104,7 @@ class VIEW3D_PT_libraries_list(bpy.types.Panel):
         # We DON'T write to scene.linked_assets_index here. 
         # We just calculate a safe number for the calculation below.
         safe_index = min(max(0, scene.linked_assets_index), len(scene.linked_assets_list) - 1)
-            
- 
-        
-        layout.operator("wm.show_outliner_vertical", text="Library Outline", icon="OUTLINER")
-        
+
     # # SAFETY: If properties aren't registered yet, stop drawing and show a message
         # if not hasattr(scene, "linked_items"):
             # layout.label(text="Addon not fully loaded...", icon='ERROR')
@@ -120,7 +120,7 @@ class VIEW3D_PT_libraries_list(bpy.types.Panel):
         
         # Header with Global Expansion Toggle
         row = layout.row(align=True)
-        row.label(text="Linked Libraries", icon='LIBRARY_DATA_DIRECT')
+        row.label(text="Linked Assets List")
         first_lib = next((i for i in scene.linked_assets_list if i.is_library), None)
         glob_icon = 'FULLSCREEN_EXIT' if (first_lib and first_lib.is_expanded) else 'FULLSCREEN_ENTER'
         row.operator("object.toggle_all_linked", text="", icon=glob_icon, emboss=False)
@@ -130,7 +130,6 @@ class VIEW3D_PT_libraries_list(bpy.types.Panel):
         
         # 4. Use the safe_index to get the item for the buttons below
         item = scene.linked_assets_list[safe_index]
-        layout.operator("wm.refresh_libraries", text="Refresh List", icon="FILE_REFRESH")
         
         # Context-Sensitive Selection Buttons
         if len(scene.linked_assets_list) > 0 and scene.linked_assets_index >= 0:
@@ -142,32 +141,110 @@ class VIEW3D_PT_libraries_list(bpy.types.Panel):
             # Safely get the item now
             item = scene.linked_assets_list[scene.linked_assets_index]
             
-            col = layout.column(align=True)
-            col.operator("object.select_linked_from_list", text=f"Select {item.name}", icon='RESTRICT_SELECT_OFF')
-            col.operator("object.focus_linked_selection", text="Focus View", icon='GRID')
-            # col.operator("wm.select_linked_objects", text="Select Asset", icon="RESTRICT_SELECT_OFF")
-        
-        # row = layout.row(align=True)
-        # row.operator("wm.select_linked_objects", text="Select Asset", icon="RESTRICT_SELECT_OFF")
+            row = layout.row(align=True)
+            row.operator("object.select_linked_from_list", text="Select Item", icon='RESTRICT_SELECT_OFF')
+            row.operator("object.focus_linked_from_list", text="Focus Item", icon='GRID')
 
-        # Library Path Management Box
-        if item.is_library:
-            lib_data = bpy.data.libraries.get(item.name)
-            if lib_data:
-                box = layout.box()
-                box.label(text="ASSET PATH", icon='FILE_BLEND')
-                row = box.row(align=True)
-                row.prop(lib_data, "filepath", text="")
-                op = row.operator("wm.relocate_library", text="", icon='FILE_ALIAS')
-                op.library_name = lib_data.name
-        
-        layout.label(text="Edit linked files")
-        row = layout.row(align=True)
-        row.operator("wm.missing_files", text="Fix Missing files", icon="LIBRARY_DATA_BROKEN")
-        row.operator("wm.cleanup_libraries", text="Clean Broken Links", icon="TRASH")
-        
-     
+            layout.operator("wm.cleanup_libraries", text="Clean Broken Files", icon="TRASH")
 
+         # 1. Get the current selection from the list
+        idx = scene.linked_assets_index
+        list_items = scene.linked_assets_list
+
+        if idx >= 0 and idx < len(list_items):
+            selected_item = list_items[idx]
+            
+            # Identify the target library
+            target_lib_name = ""
+            is_main_library_selected = selected_item.is_library
+            
+            if is_main_library_selected:
+                target_lib_name = selected_item.name
+            else:
+                # User selected a sub-item: Search backwards for parent
+                for i in range(idx - 1, -1, -1):
+                    if list_items[i].is_library:
+                        target_lib_name = list_items[i].name
+                        break
+            
+            # 2. Draw the UI Elements
+            if target_lib_name:
+                lib_data = bpy.data.libraries.get(target_lib_name)
+                if lib_data:
+                    # --- TITLE (Outside the box) ---
+                    # Using LINK_BLEND which is the correct icon for .blend libraries
+                    layout.label(text=f"Asset Path: {target_lib_name}")
+
+                    # --- ACTION BOX ---
+                    box = layout.box()
+                    # Set the box to be greyed out if a sub-item is selected
+                    box.enabled = is_main_library_selected
+                    
+                    # File path property
+                    box.prop(lib_data, "filepath", text="")
+                    
+                    # Relocate Button
+                    op = box.operator("wm.relocate_library", text="Relocate Library")
+                    op.library_name = lib_data.name
+
+
+
+class VIEW3D_PT_external_data(bpy.types.Panel):
+    """Creates a Panel in the 3D Viewport under the Item tab listing library file paths"""
+    bl_label = "Resources and Data"
+    bl_idname = "VIEW3D_PT_external_data"
+    bl_parent_id = "VIEW3D_PT_library_main" # <--- THIS LINKS THEM
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
+        
+        # Access the global 'Automatically Pack Resources' setting
+        is_autopack = context.blend_data.use_autopack
+        
+        # Define text based on the state
+        btn_text_pack = "Auto Pack ON" if is_autopack else "Auto Pack Resources"
+        btn_icon_pack = 'CHECKBOX_HLT' if is_autopack else "CHECKBOX_DEHLT"
+        
+        # Since import_method is an ENUM, you usually set it via operator or prop
+        # 1. Global Auto-Pack Toggle
+        layout.label(text="Pack / Unpack Resources")
+        col = layout.column(align=True)
+        col.prop(context.blend_data, "use_autopack", text=btn_text_pack, toggle=True,icon=btn_icon_pack,)
+
+ 
+        # 2. Packing Operators
+        col = layout.column(align=True)
+        col.operator("file.pack_all", text="Pack Resources")
+        col.operator("file.unpack_all", text="Unpack Resources")
+        
+        layout.separator()
+        
+        # 3. Linked Library Packing
+        col = layout.column(align=True)
+        col.operator("file.pack_libraries", text="Pack Linked Libraries")
+        col.operator("file.unpack_libraries", text="Unpack Linked Libraries")
+        
+        # layout.separator()
+        layout.label(text="Paths Relative/Absolute")
+        # 4. Path Management (Relative vs Absolute)
+        col = layout.column(align=True)
+        col.operator("file.make_paths_relative", text="Make Paths Relative", icon='LINKED')
+        col.operator("file.make_paths_absolute", text="Make Paths Absolute", icon='UNLINKED')
+        
+        # layout.separator()
+        layout.label(text="Fix Missing files")
+        # 5. Missing File Tools (Most Important for Library Managers)
+        col = layout.column(align=True)
+        col.operator("file.report_missing_files", text="Report Missing Files")
+        col.operator("file.find_missing_files", text="Find Missing Files")
+        
+        layout.separator()
+        
+
+            
 class VIEW3D_UL_libraries(bpy.types.UIList):
     """UIList that truly collapses and expands sub-items"""
     bl_idname = "VIEW3D_UL_libraries"
@@ -197,7 +274,7 @@ class VIEW3D_UL_libraries(bpy.types.UIList):
             button_row = row.row(align=True)
             
             if item.is_broken:
-                row.operator("wm.relocate_library", text="", icon='FILE_ALIAS')
+                row.operator("wm.relocate_library", text="", icon='FILE_ALIAS', emboss=False)
             else:
                 op = button_row.operator("wm.reload_library", text="", icon="FILE_REFRESH", emboss=False)
                 op.library_name = item.name
@@ -245,6 +322,7 @@ classes = (
     VIEW3D_PT_library_preferences,
     VIEW3D_PT_assetbrowser_preferences,
     VIEW3D_PT_libraries_list,
+    VIEW3D_PT_external_data,
     VIEW3D_UL_libraries,
 )
 

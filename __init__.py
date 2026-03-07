@@ -1,9 +1,9 @@
 bl_info = {
     "name": "Library Manager",
-    "author": "Your Name",
+    "author": "Carlos Silva",
     "version": (1, 0),
-    "blender": (5, 0, 0),
-    "location": "View3D > Item > Library Manager ",
+    "blender": (5, 1, 0),
+    "location": "View3D > Library Manager ",
     "description": "Manage and track linked data blocks and libraries.",
     "category": "Interface",
 }

@@ -106,28 +106,45 @@ def update_linked_items_list(scene=None, context=None):
 
 
 def select_instances_internal(scene, context, item):
-    """Helper to select objects in the 3D view based on list selection"""
+    # 1. Clear current selection to start fresh
     bpy.ops.object.select_all(action='DESELECT')
-    found = False
-    for obj in scene.objects:
-        match = False
-        if item.is_library:
-            lib = obj.instance_collection.library if (obj.type == 'EMPTY' and obj.instance_collection) else obj.library
-            if lib and lib.filepath == item.lib_path:
-                match = True
-        else:
-            if item.is_collection:
-                if obj.type == 'EMPTY' and obj.instance_collection and obj.instance_collection.name == item.asset_id:
-                    match = True
-            else:
-                if obj.data and obj.data.name == item.asset_id:
-                    match = True
+    
+    count = 0
+    target_name = item.name # This is the name from your UI list
+    
+    # 2. Iterate through all objects in the current View Layer
+    for obj in context.view_layer.objects:
+        is_match = False
         
-        if match:
+        # --- CHECK CATEGORY 1: Linked Data (Lights, Meshes, Cameras, etc.) ---
+        if obj.data:
+            # Check if this data comes from the specific library file
+            if obj.data.library and obj.data.library.name == target_name:
+                is_match = True
+            # Check if the data name itself matches (for appended/local items)
+            elif obj.data.name == target_name:
+                is_match = True
+                
+        # --- CHECK CATEGORY 2: Collection Instances (The 'Empty' group) ---
+        if not is_match and obj.instance_type == 'COLLECTION' and obj.instance_collection:
+            if obj.instance_collection.name == target_name:
+                is_match = True
+            # Also check if the collection itself is linked from the target library
+            elif obj.instance_collection.library and obj.instance_collection.library.name == target_name:
+                is_match = True
+
+        # --- CHECK CATEGORY 3: Object-Level Library Link ---
+        if not is_match and obj.library and obj.library.name == target_name:
+            is_match = True
+
+        # 3. If any of the above matched, select the object
+        if is_match:
             obj.select_set(True)
+            # Make the last one found the 'Active' object for framing
             context.view_layer.objects.active = obj
-            found = True
-    return found
+            count += 1
+            
+    return count
    
 
 @bpy.app.handlers.persistent
