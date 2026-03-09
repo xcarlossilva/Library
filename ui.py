@@ -95,11 +95,32 @@ class VIEW3D_PT_libraries_list(bpy.types.Panel):
         layout.operator("wm.show_outliner_vertical", text="Library Outline", icon="OUTLINER")
         layout.operator("wm.refresh_libraries", text="Add / Refresh - List", icon="FILE_REFRESH")
        
-    # 1. Check if list is empty first
+   #===========================================================
+   # !!!!! Report message if the scene does not have linked assets !!!!! 
+   #===========================================================
+       
+       # 1. Check if list is empty first
         if not scene.linked_assets_list:
-            layout.label(text="No linked assets found.", icon='INFO')
-            return
+            # Create a box to house the message
+            box = layout.box()
+            
+            # Add vertical padding at the top
+            col = box.column()
+            col.scale_y = 2.0
+            
+            # Create a row and set alignment to CENTER
+            row = col.row()
+            row.alignment = 'CENTER'
+            
+            # Display the text (Icons removed as requested)
+            row.label(text="No linked assets found.",icon='ERROR')
+            
+            row = col.row()
+            row.alignment = 'CENTER'
+            row.label(text="Link an Asset to see the list.")
 
+            return
+  
         # 2. Get a safe index for the UI to use right now
         # We DON'T write to scene.linked_assets_index here. 
         # We just calculate a safe number for the calculation below.
@@ -210,7 +231,7 @@ class VIEW3D_PT_external_data(bpy.types.Panel):
         
         # Since import_method is an ENUM, you usually set it via operator or prop
         # 1. Global Auto-Pack Toggle
-        layout.label(text="Pack / Unpack Resources")
+        layout.label(text="Resources - Pack / Unpack ")
         col = layout.column(align=True)
         col.prop(context.blend_data, "use_autopack", text=btn_text_pack, toggle=True,icon=btn_icon_pack,)
 
@@ -228,14 +249,14 @@ class VIEW3D_PT_external_data(bpy.types.Panel):
         col.operator("file.unpack_libraries", text="Unpack Linked Libraries")
         
         # layout.separator()
-        layout.label(text="Paths Relative/Absolute")
+        layout.label(text="Paths - Relative/Absolute")
         # 4. Path Management (Relative vs Absolute)
         col = layout.column(align=True)
         col.operator("file.make_paths_relative", text="Make Paths Relative", icon='LINKED')
         col.operator("file.make_paths_absolute", text="Make Paths Absolute", icon='UNLINKED')
         
         # layout.separator()
-        layout.label(text="Fix Missing files")
+        layout.label(text="Fix - Missing files")
         # 5. Missing File Tools (Most Important for Library Managers)
         col = layout.column(align=True)
         col.operator("file.report_missing_files", text="Report Missing Files")
@@ -244,54 +265,64 @@ class VIEW3D_PT_external_data(bpy.types.Panel):
         layout.separator()
         
 
-            
+ 
 class VIEW3D_UL_libraries(bpy.types.UIList):
-    """UIList that truly collapses and expands sub-items"""
+    """UIList that handles assets and libraries with ghost status"""
     bl_idname = "VIEW3D_UL_libraries"
 
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
-        # We don't need complex logic here anymore because filter_items 
-        # will handle whether the item is even sent to this function.
-        
         row = layout.row(align=True)
 
         if item.is_library:
-            # Handle the folder icon/warning
-            main_icon = 'ERROR' if item.is_broken else 'ERROR'
-            
-            # Library Header
-            icon_type = 'DISCLOSURE_TRI_DOWN' if item.is_expanded else 'DISCLOSURE_TRI_RIGHT'
-            row.prop(item, "is_expanded", text="", icon=icon_type, emboss=False)
-            # row.label(text=item.name)
-            
+            # 1. Indicator Icons (Broken vs Ghost)
             if item.is_broken:
-                row.label(text= item.name, icon='CANCEL_LARGE')
-            else:
-                row.label(text=item.name)
+                row.label(text="", icon='ERROR')
+            elif item.is_empty_link:
+                row.label(text="", icon='GHOST_DISABLED')
             
-               
-            # Right-aligned utility buttons
+            # 2. Expand Toggle
+            row.prop(item, "is_expanded", text="", emboss=False, 
+                     icon='TRIA_DOWN' if item.is_expanded else 'TRIA_RIGHT')
+            
+            row.label(text=item.name)
+            
+            # if item.is_empty_link:
+                # row.label(text="", translate=False)
+            
+            # Utility buttons
             button_row = row.row(align=True)
-            
-            if item.is_broken:
-                row.operator("wm.relocate_library", text="", icon='FILE_ALIAS', emboss=False)
-            else:
+            if not item.is_broken:
                 op = button_row.operator("wm.reload_library", text="", icon="FILE_REFRESH", emboss=False)
                 op.library_name = item.name
-
+                
                 op = button_row.operator("wm.open_library", text="", icon="BLENDER", emboss=False)
                 op.library_name = item.name
             
-            op = button_row.operator("wm.delete_library", text="", icon="TRASH", emboss=False)
-            op.library_name = item.name
+            del_op = button_row.operator("wm.delete_library", text="", icon="TRASH", emboss=False)
+            del_op.library_name = item.name
                 
         else:
-            # Child items
+            # --- CHILD ASSETS ---
             row.separator(factor=2.0)
-            # If the library is broken, the children should probably look "disabled"
-            sub_icon = 'CANCEL' if item.is_broken else ('OUTLINER_COLLECTION' if item.is_collection else 'OBJECT_DATA')
-            row.enabled = not item.is_broken # Disable clicking on items from missing files
-            row.label(text=item.name, icon=sub_icon)
+            
+            # FIX: Define icon_type before using it!
+            icon_type = 'OUTLINER_COLLECTION' if item.is_collection else 'OBJECT_DATA'
+            
+            if item.is_broken:
+                row.label(text=item.name, icon='CANCEL')
+                row.enabled = False
+            else:
+                # Use ghost icon if parent library has no instances in scene
+                sub_icon = 'GHOST_ENABLED' if item.is_empty_link else icon_type
+                
+                # Draw the Asset Name
+                row.label(text=item.name, icon=sub_icon)
+                
+                # NEW: Add the Place Asset button (Pseudo-Drag substitute)
+                # This button will spawn the asset at the 3D Cursor
+                place_op = row.operator("wm.place_linked_asset", text="", icon='ADD', emboss=False)
+                place_op.asset_name = item.name
+                place_op.is_collection = item.is_collection
 
     def filter_items(self, context, data, propname):
         """This function physically removes items from the list view"""

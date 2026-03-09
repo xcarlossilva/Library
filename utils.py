@@ -3,20 +3,19 @@ import os
 
     
 def update_linked_items_list(scene=None, context=None):
-    """Rebuilds the UI list while maintaining selection and expansion states."""
+    """Rebuilds the list from Library data, ensuring assets persist after scene deletion."""
     
-    # 1. Setup & Fallback
-    if scene is None:
+    if scene is None: 
         scene = bpy.context.scene
     
-    # 2. Safety Lock: Prevent recursion if the handler triggers during an update
+    # Prevents recursion errors
     if scene.get("is_updating_linked_list", False):
         return None
         
     scene.is_updating_linked_list = True
 
     try:
-        # 3. STORE STATE: Remember what was selected and expanded before clearing
+        # --- 1. STORE CURRENT STATE ---
         selected_name = ""
         if 0 <= scene.linked_assets_index < len(scene.linked_assets_list):
             selected_name = scene.linked_assets_list[scene.linked_assets_index].name
@@ -26,41 +25,46 @@ def update_linked_items_list(scene=None, context=None):
             for item in scene.linked_assets_list if item.is_library
         }
 
-        # 4. CLEAR: Wipe the list to start fresh
+        # --- 2. RESET LIST ---
         scene.linked_assets_list.clear()
         lib_groups = {}
 
-        # 5. SCAN: Find all linked Collections and Objects
+        # --- 3. SCAN ALL LIBRARIES & THEIR ASSETS ---
+        # This part ensures that even if 0 instances exist in the scene, 
+        # the asset remains visible in the UI list.
+        for lib in bpy.data.libraries:
+            abs_path = bpy.path.abspath(lib.filepath)
+            lib_groups[lib.name] = {
+                "path": lib.filepath, 
+                "assets": set(),
+                "is_broken": not os.path.exists(abs_path)
+            }
+
+            # Deep Scan: Find Collections in THIS library marked as Assets
+            for coll in bpy.data.collections:
+                if coll.library == lib and coll.asset_data:
+                    lib_groups[lib.name]["assets"].add((coll.name, True))
+
+            # Deep Scan: Find Objects in THIS library marked as Assets
+            for obj_data in bpy.data.objects:
+                if obj_data.library == lib and obj_data.asset_data:
+                    lib_groups[lib.name]["assets"].add((obj_data.name, False))
+
+        # --- 4. SCAN SCENE FOR ACTIVE USAGE ---
+        # We build a lookup set to determine which items are 'Ghosts'
+        assets_in_scene = set()
         for obj in scene.objects:
-            lib = None
-            asset_info = None
+            # Check for Collection Instances (Empties)
+            if obj.instance_collection:
+                assets_in_scene.add(obj.instance_collection.name)
+            
+            # Check for Direct Object Links (Mesh/Data)
+            if obj.library:
+                assets_in_scene.add(obj.name)
+            if obj.data and obj.data.library:
+                assets_in_scene.add(obj.data.name)
 
-            # Case A: Linked Collections (Instances/Empties)
-            if obj.type == 'EMPTY' and obj.instance_collection and obj.instance_collection.library:
-                coll = obj.instance_collection
-                lib = coll.library
-                asset_info = (coll.name, True) # (Name, IsCollection)
-
-            # Case B: Linked Objects (Directly linked meshes/lights/etc)
-            elif obj.library and obj.data:
-                lib = obj.library
-                asset_info = (obj.data.name, False)
-
-            if lib and asset_info:
-                lib_name = lib.name
-                if lib_name not in lib_groups:
-                    # Resolve the path to absolute so os.path can find it
-                    abs_path = bpy.path.abspath(lib.filepath)
-                    is_broken = not os.path.exists(abs_path)
-                    
-                    lib_groups[lib_name] = {
-                    "path": lib.filepath, 
-                    "assets": set(),
-                    "is_broken": is_broken
-                    }
-                lib_groups[lib_name]["assets"].add(asset_info)
-
-        # 6. REBUILD: Add the data back to the CollectionProperty
+        # --- 5. REBUILD THE UI COLLECTION ---
         for lib_name in sorted(lib_groups.keys()):
             data = lib_groups[lib_name]
             
@@ -71,38 +75,39 @@ def update_linked_items_list(scene=None, context=None):
             parent.lib_path = data["path"]
             parent.is_expanded = expansion_states.get(data["path"], False)
             parent.is_broken = data["is_broken"]
+            
+            # Library header status: ghost if no child assets are in the scene
+            lib_in_use = any(name in assets_in_scene for name, is_c in data["assets"])
+            parent.is_empty_link = not lib_in_use
 
-            # Add Child Assets
+            # Add Asset Sub-items
             for asset_name, is_coll in sorted(data["assets"]):
                 child = scene.linked_assets_list.add()
                 child.name = asset_name
-                child.asset_id = asset_name
                 child.is_collection = is_coll
                 child.is_library = False
                 child.lib_path = data["path"]
+                child.is_broken = data["is_broken"]
+                
+                # If it's in the scene, it's a solid item. If not, it's a ghost.
+                child.is_empty_link = asset_name not in assets_in_scene
 
-        # 7. RESTORE SELECTION: Find the item we had selected before the refresh
+        # --- 6. RESTORE SELECTION ---
+        num_items = len(scene.linked_assets_list)
         new_index = 0
-        if selected_name:
+        if selected_name and num_items > 0:
             for i, item in enumerate(scene.linked_assets_list):
                 if item.name == selected_name:
                     new_index = i
                     break
         
-        # 8. CLAMP & APPLY: Final safety check for the index
-        if len(scene.linked_assets_list) > 0:
-            scene.linked_assets_index = min(new_index, len(scene.linked_assets_list) - 1)
-        else:
-            scene.linked_assets_index = 0
+        scene.linked_assets_index = min(new_index, num_items - 1) if num_items > 0 else 0
 
     except Exception as e:
-        print(f"Library Manager Update Error: {e}")
+        print(f"Library Manager Error: {e}")
     
     finally:
-        # 9. UNLOCK: Always release the lock so the next update can run
         scene.is_updating_linked_list = False
-    
-    return None # Required for Blender Timers
 
 
 def select_instances_internal(scene, context, item):

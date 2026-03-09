@@ -652,6 +652,46 @@ class WM_OT_path_absolute(bpy.types.Operator):
             return {'CANCELLED'}
 
 
+
+class WM_OT_place_linked_asset(bpy.types.Operator):
+    """Instantiate the linked asset at the 3D Cursor"""
+    bl_idname = "wm.place_linked_asset"
+    bl_label = "Place Linked Asset"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    asset_name: bpy.props.StringProperty()
+    is_collection: bpy.props.BoolProperty()
+
+    def execute(self, context):
+        try:
+            if self.is_collection:
+                coll = bpy.data.collections.get(self.asset_name)
+                if coll:
+                    obj = bpy.data.objects.new(self.asset_name, None)
+                    obj.instance_collection = coll
+                    obj.instance_type = 'COLLECTION'
+                    context.scene.collection.objects.link(obj)
+                    obj.location = context.scene.cursor.location
+            else:
+                obj_data = bpy.data.objects.get(self.asset_name)
+                if obj_data:
+                    new_obj = bpy.data.objects.new(obj_data.name, obj_data.data)
+                    context.scene.collection.objects.link(new_obj)
+                    new_obj.location = context.scene.cursor.location
+            
+            # FIX: Call the function directly instead of using bpy.ops
+            from .ui import update_linked_items_list # Adjust import path if needed
+            update_linked_items_list(context.scene, context)
+            
+            # Select the new object and make it active
+            context.view_layer.objects.active = obj if self.is_collection else new_obj
+            (obj if self.is_collection else new_obj).select_set(True)
+            
+            return {'FINISHED'}
+        except Exception as e:
+            self.report({'ERROR'}, f"Placement failed: {e}")
+            return {'CANCELLED'}
+
 classes = (
     WM_OT_library_prefs,
     WM_OT_set_asset_import_link,
@@ -683,6 +723,8 @@ classes = (
     WM_OT_path_absolute,
     
     WM_OT_reveal_all_objects,
+    
+    WM_OT_place_linked_asset,
 )
 
 def register():

@@ -13,7 +13,8 @@ class LinkedAssetItem(bpy.types.PropertyGroup):
     asset_id: bpy.props.StringProperty()
     is_broken: bpy.props.BoolProperty(default=False) # <--- Add this
     is_collection: bpy.props.BoolProperty()
-
+    # In your properties.py or wherever your list item is defined:
+    is_empty_link: bpy.props.BoolProperty(name="Is Empty Link", default=False)
 # =========================================================================
 # REGISTRATION
 # =========================================================================
